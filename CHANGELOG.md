@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Faster, clearer upload finalization**: uploaded chunks now stream into a single
+  temporary file instead of a folder of parts, so finishing an upload no longer
+  rewrites the whole file — the server just verifies the SHA-256 checksum and
+  atomically renames the file into place. The transfers tray shows this as a new
+  "Verifying" step, and peak disk usage during an upload drops by half.
+- **New loading spinner**: the blinking [Loading] text is replaced by a rotating
+  arc spinner everywhere (static under reduced motion).
+
 ## [1.37.0] - 2026-07-24
 
 ### Security

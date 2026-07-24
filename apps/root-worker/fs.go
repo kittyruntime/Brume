@@ -443,36 +443,31 @@ func doDelete(path string) *fsError {
 	return nil
 }
 
-// ── assemble ──────────────────────────────────────────────────────────────────
+// ── finalize ──────────────────────────────────────────────────────────────────
 
-func doAssemble(destFile string, chunks []string, expectedSha string) *fsError {
-	// 0664 so uploads land group-writable (with umask 0002); combined with the
-	// setgid share dir this lets any write-user overwrite the file later.
-	out, err := os.OpenFile(destFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
+// doFinalize verifies the whole-file SHA-256 of the uploaded temp file and,
+// on match, atomically renames it into place (same directory, so rename
+// never crosses a filesystem). On mismatch the temp file is removed so no
+// corrupt partial is left behind.
+func doFinalize(tempFile, destFile, expectedSha string) *fsError {
+	f, err := os.Open(tempFile)
 	if err != nil {
 		return mapOsErr(err)
 	}
-	defer out.Close()
-
 	h := sha256.New()
-	for _, chunk := range chunks {
-		f, err := os.Open(chunk)
-		if err != nil {
-			return mapOsErr(err)
-		}
-		_, cpErr := io.Copy(io.MultiWriter(out, h), f)
-		f.Close()
-		if cpErr != nil {
-			return &fsError{Code: "ERR", Message: cpErr.Error()}
-		}
+	_, cpErr := io.Copy(h, f)
+	f.Close()
+	if cpErr != nil {
+		return &fsError{Code: "ERR", Message: cpErr.Error()}
 	}
 
 	if expectedSha != "" && hex.EncodeToString(h.Sum(nil)) != strings.ToLower(expectedSha) {
-		// Close before removing so the corrupted file isn't left open, and
-		// don't leave a partial/wrong file behind for the caller to trip on.
-		out.Close()
-		os.Remove(destFile)
+		os.Remove(tempFile)
 		return &fsError{Code: "ECHECKSUM", Message: "checksum mismatch — file corrupted in transfer"}
+	}
+
+	if err := os.Rename(tempFile, destFile); err != nil {
+		return mapOsErr(err)
 	}
 	return nil
 }

@@ -29,23 +29,22 @@ func getenv(key, fallback string) string {
 
 // taskMsg is the payload published by the backend for async jobs.
 type taskMsg struct {
-	JobID         string   `json:"jobId"`
-	LinuxUsername string   `json:"linuxUsername"`
-	Path          string   `json:"path"`
-	ParentPath    string   `json:"parentPath"`
-	Name          string   `json:"name"`
-	Src           string   `json:"src"`
-	DstDir        string   `json:"dstDir"`
-	NewName       string   `json:"newName"`
-	DestFile      string   `json:"destFile"`
-	Chunks        []string `json:"chunks"`
-	StagingDir    string   `json:"stagingDir"`
-	ExpectedSha   string   `json:"expectedSha"`
-	Mode          string   `json:"mode"`
-	Owner         string   `json:"owner"`
-	Group         string   `json:"group"`
+	JobID         string `json:"jobId"`
+	LinuxUsername string `json:"linuxUsername"`
+	Path          string `json:"path"`
+	ParentPath    string `json:"parentPath"`
+	Name          string `json:"name"`
+	Src           string `json:"src"`
+	DstDir        string `json:"dstDir"`
+	NewName       string `json:"newName"`
+	DestFile      string `json:"destFile"`
+	TempFile      string `json:"tempFile"`
+	ExpectedSha   string `json:"expectedSha"`
+	Mode          string `json:"mode"`
+	Owner         string `json:"owner"`
+	Group         string `json:"group"`
 
-	// AllowedRoot scopes Path/ParentPath/Src/DestFile/Chunks/StagingDir to a
+	// AllowedRoot scopes Path/ParentPath/Src/DestFile/TempFile to a
 	// directory (the caller's "Place"). DstAllowedRoot scopes DstDir
 	// separately since copy/move can cross two different places. Empty
 	// means unrestricted (admin operations).
@@ -127,7 +126,7 @@ var taskSubjects = []string{
 	"root.fs.move",
 	"root.fs.rename",
 	"root.fs.delete",
-	"root.fs.assemble",
+	"root.fs.finalize",
 	"root.fs.chmod",
 	"root.fs.chown",
 	"root.fs.zip",
@@ -179,13 +178,20 @@ func ensureConsumer(js nats.JetStreamContext) {
 
 // ── Request-reply handlers ────────────────────────────────────────────────────
 
-// handleWriteChunk writes a single upload chunk directly into
-// <destDir>/.uploads-<uploadId>/<chunkIndex>.part as the target user.
-// Metadata arrives in the "X-Meta" NATS header; raw binary in msg.Data.
+// maxUploadOffset bounds WriteAt targets to the backend's own upload ceiling
+// (MAX_CHUNKS = 131072 chunks of 2 MiB = 256 GiB) so a forged offset cannot
+// create a multi-terabyte sparse file that the serial finalize job would
+// then hash for hours.
+const maxUploadOffset = int64(131072) * 2 * 1024 * 1024
+
+// handleWriteChunk writes a single upload chunk at its byte offset directly
+// into <destDir>/.upload-<uploadId>.part as the target user. Metadata arrives
+// in the "X-Meta" NATS header; raw binary in msg.Data. Retried chunks rewrite
+// the same offset, which is harmless.
 func handleWriteChunk(nc *nats.Conn, msg *nats.Msg) {
 	type chunkMeta struct {
 		UploadID      string `json:"uploadId"`
-		ChunkIndex    int    `json:"chunkIndex"`
+		Offset        int64  `json:"offset"`
 		DestDir       string `json:"destDir"`
 		LinuxUsername string `json:"linuxUsername"`
 		AllowedRoot   string `json:"allowedRoot"`
@@ -201,24 +207,41 @@ func handleWriteChunk(nc *nats.Conn, msg *nats.Msg) {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "bad X-Meta: " + err.Error()})
 		return
 	}
+	// uploadId becomes part of a filename — never let it carry path segments.
+	if meta.UploadID == "" || strings.ContainsAny(meta.UploadID, "/\\") || strings.Contains(meta.UploadID, "..") {
+		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "invalid uploadId"})
+		return
+	}
+	if meta.Offset < 0 {
+		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "negative offset"})
+		return
+	}
+	if meta.Offset > maxUploadOffset {
+		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "offset exceeds maximum upload size"})
+		return
+	}
 	if fsErr := validateScoped(meta.DestDir, meta.AllowedRoot); fsErr != nil {
 		replyErr(nc, msg.Reply, fsErr)
 		return
 	}
 
-	stagingDir := filepath.Join(meta.DestDir, ".uploads-"+meta.UploadID)
-	chunkPath := filepath.Join(stagingDir, fmt.Sprintf("%d.part", meta.ChunkIndex))
+	tempPath := filepath.Join(meta.DestDir, ".upload-"+meta.UploadID+".part")
 	data := msg.Data
 
 	var fsErr *fsError
 	if err := withUser(meta.LinuxUsername, func() error {
-		if err := os.MkdirAll(stagingDir, 0775); err != nil {
+		// 0664 so the finalized upload lands group-writable (with umask 0002).
+		f, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY, 0664)
+		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(chunkPath, data, 0664); err != nil {
+		if _, err := f.WriteAt(data, meta.Offset); err != nil {
+			f.Close()
 			return err
 		}
-		return nil
+		// Close errors matter here: on some filesystems ENOSPC only
+		// surfaces at close, and an acked chunk must be durably written.
+		return f.Close()
 	}); err != nil {
 		fsErr = toFsErr(err)
 	}
@@ -717,13 +740,13 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 			result = map[string]bool{"ok": true}
 		}
 
-	case "root.fs.assemble":
-		// DestFile, chunks and the staging dir all live under the same
-		// destination directory, so they share AllowedRoot.
-		fsErr = validatePathsScoped(task.AllowedRoot, append([]string{task.DestFile}, task.Chunks...)...)
+	case "root.fs.finalize":
+		// tempFile and destFile live in the same destination directory,
+		// so they share AllowedRoot.
+		fsErr = validatePathsScoped(task.AllowedRoot, task.DestFile, task.TempFile)
 		if fsErr == nil {
 			err := withUser(task.LinuxUsername, func() error {
-				fsErr = doAssemble(task.DestFile, task.Chunks, task.ExpectedSha)
+				fsErr = doFinalize(task.TempFile, task.DestFile, task.ExpectedSha)
 				if fsErr != nil {
 					return fsErr
 				}
@@ -733,12 +756,6 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 				fsErr = toFsErr(err)
 			}
 			if fsErr == nil {
-				// Clean up staging dir (owned by the backend user — remove as root).
-				if task.StagingDir != "" {
-					if verr := validateScoped(task.StagingDir, task.AllowedRoot); verr == nil {
-						_ = os.RemoveAll(task.StagingDir)
-					}
-				}
 				result = map[string]bool{"ok": true}
 			}
 		}

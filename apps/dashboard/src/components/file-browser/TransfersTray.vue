@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useUploads, type Transfer, type TransferStatus } from '../../lib/uploads'
 import { resumeByReselect } from '../../lib/upload-runner'
+import LoadingSpinner from '../ui/LoadingSpinner.vue'
 
 const uploads = useUploads()
 const collapsed = ref(false)
@@ -13,7 +14,7 @@ const reselectInput = ref<HTMLInputElement | null>(null)
 const reselectTargetId = ref<string | null>(null)
 
 // Non-terminal — still doing (or about to do) something.
-const ACTIVE: TransferStatus[] = ['uploading', 'running', 'paused', 'queued']
+const ACTIVE: TransferStatus[] = ['uploading', 'verifying', 'running', 'paused', 'queued']
 // Done, one way or another — safe to dismiss.
 const TERMINAL: TransferStatus[] = ['done', 'cancelled', 'error']
 // Pause/resume + cancel both make sense on these.
@@ -59,6 +60,7 @@ function statusLabel(t: Transfer): string {
     case 'error':      return 'error'
     case 'done':       return 'done'
     case 'cancelled':  return 'cancelled'
+    case 'verifying':  return ''
     default:           return t.status
   }
 }
@@ -194,6 +196,11 @@ function handleReselectPick(e: Event) {
               <div class="h-full rounded-full transition-all"
                 :class="t.status === 'paused' ? 'bg-[var(--c-warning)]' : 'bg-[var(--c-accent)]'"
                 :style="{ width: pct(t) + '%' }" />
+            </div>
+
+            <!-- Verifying (server-side checksum before atomic rename) -->
+            <div v-else-if="t.status === 'verifying'" class="mt-1">
+              <LoadingSpinner label="Verifying" />
             </div>
 
             <!-- Indeterminate bar (copy/move in progress) -->

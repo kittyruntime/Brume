@@ -3,16 +3,36 @@ withDefaults(defineProps<{ label?: string }>(), { label: 'Loading' })
 </script>
 
 <template>
-  <span class="inline-flex items-center font-mono text-xs uppercase tracking-wider text-[var(--c-text-3)] loading-blink">
-    [{{ label }}]
+  <span class="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[var(--c-text-3)]">
+    <!-- 3/4-turn arc; circumference of r=6.5 is ~40.84 so 30.6/10.2 leaves a rounded gap -->
+    <svg class="spinner-arc w-[1em] h-[1em] shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle
+        cx="8" cy="8" r="6.5"
+        stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-dasharray="30.6 10.2"
+      />
+    </svg>
+    <span class="spinner-label">{{ label }}</span>
   </span>
 </template>
 
 <style scoped>
-.loading-blink {
-  animation: loading-blink 1s steps(2, jump-none) infinite;
+/* Literal duration on purpose: the --dur-* motion tokens collapse to ~1ms
+   under prefers-reduced-motion, which would turn an infinite rotation into
+   a strobe. Reduced motion is handled explicitly below instead. */
+.spinner-arc {
+  animation: spinner-rotate 0.8s linear infinite;
 }
-@keyframes loading-blink {
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner-arc { animation: none; }
+  .spinner-label {
+    animation: spinner-blink 1s steps(2, jump-none) infinite;
+  }
+}
+@keyframes spinner-blink {
   50% { opacity: 0.35; }
 }
 </style>

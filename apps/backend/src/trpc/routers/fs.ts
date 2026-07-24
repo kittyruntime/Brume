@@ -232,10 +232,14 @@ export const fsRouter = router({
   // ── writeText (async) — save editor content, reusing the upload pipeline ────
   //
   // There's no "overwrite whole file" worker command; this reuses the exact
-  // same chunked-upload + assemble path as a real file upload (single
-  // in-memory chunk), which already truncates-and-overwrites an existing
-  // destination file (apps/root-worker/fs.go doAssemble, O_TRUNC). Zero
-  // changes to the root-worker needed.
+  // same offset-write + finalize path as a real file upload (single
+  // in-memory chunk at offset 0 into a temp file), which already
+  // truncates-and-overwrites an existing destination file via the atomic
+  // rename in apps/root-worker/fs.go doFinalize. Zero changes to the
+  // root-worker needed. Unlike a real upload, the whole buffer is already in
+  // memory here, so the expected SHA-256 is computed directly instead of
+  // being supplied by the client — the finalize job still verifies it before
+  // renaming into place.
   writeText: protectedProcedure
     .input(z.object({ path: z.string(), content: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -246,14 +250,14 @@ export const fsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User has no Linux account configured" })
       }
 
-      const uploadId   = crypto.randomUUID()
-      const destDir    = dirname(p)
-      const stagingDir = join(destDir, `.uploads-${uploadId}`)
-      const data       = Buffer.from(input.content, "utf-8")
+      const uploadId = crypto.randomUUID()
+      const destDir  = dirname(p)
+      const tempPath = join(destDir, `.upload-${uploadId}.part`)
+      const data     = Buffer.from(input.content, "utf-8")
 
       try {
         await writeChunk({
-          uploadId, chunkIndex: 0,
+          uploadId, offset: 0,
           destDir, linuxUsername: linuxUser, allowedRoot: allowedRoot ?? "",
           data,
         })
@@ -261,14 +265,16 @@ export const fsRouter = router({
         throw mapWorkerError(e)
       }
 
+      const expectedSha = crypto.createHash("sha256").update(data).digest("hex")
+
       const jobId = await publishJob(
-        "fs.assemble",
+        "fs.finalize",
         {
           linuxUsername: linuxUser,
+          tempFile:    tempPath,
           destFile:    p,
-          chunks:      [join(stagingDir, "0.part")],
-          stagingDir,
           allowedRoot: allowedRoot ?? "",
+          expectedSha,
         },
         ctx.user.userId,
       )

@@ -140,8 +140,8 @@ export async function fileRoutes(app: FastifyInstance) {
   // Clean up uploads that have been silent for more than UPLOAD_TTL_MS.
   startUploadGc((id, state) => {
     app.log.warn({ uploadId: id }, "Stale upload evicted by GC")
-    publishJob("fs.delete", { linuxUsername: state.linuxUser, path: state.stagingDir, allowedRoot: state.allowedRoot })
-      .catch(err => app.log.error(err, "Failed to clean up stale upload staging dir"))
+    publishJob("fs.delete", { linuxUsername: state.linuxUser, path: state.tempPath, allowedRoot: state.allowedRoot })
+      .catch(err => app.log.error(err, "Failed to clean up stale upload temp file"))
   })
 
   // ── GET /files/download?path=<path>&token=<file-token>[&inline=1] ────────
@@ -304,21 +304,23 @@ export async function fileRoutes(app: FastifyInstance) {
   //   X-Upload-Id      — unique ID per file upload (UUID)
   //   X-Chunk-Index    — 0-based chunk index
   //   X-Total-Chunks   — total number of chunks
+  //   X-Chunk-Offset   — byte offset of this chunk within the final file
   //   X-File-Name      — URI-encoded filename
   //   X-Dest-Dir       — URI-encoded destination directory
-  //   X-Total-Bytes    — optional; total upload size, used for a one-time
-  //                       disk-space preflight when the upload is created
+  //   X-Total-Bytes    — required on the first chunk; total upload size,
+  //                       used for a one-time disk-space preflight and to
+  //                       bound every subsequent chunk's byte offset
   //
   // Body: raw binary (application/octet-stream)
   //
-  // Chunks are written by the root worker DIRECTLY into
-  // <destDir>/.uploads-<uploadId>/ under the linuxUser's identity,
-  // so no /tmp staging and no double disk usage.
+  // Chunks are written by the root worker DIRECTLY at their byte offset into
+  // <destDir>/.upload-<uploadId>.part under the linuxUser's identity — a
+  // single temp file, no staging dir, no separate assembly pass.
   //
-  // This route only STAGES chunks — it never triggers assembly. The
+  // This route only WRITES chunks — it never triggers finalize. The
   // last-chunk response is just { ok: true, done: true }; the client must
-  // call POST /files/upload/complete to actually publish the assemble job
-  // (see below), which makes assembly explicit and retryable.
+  // call POST /files/upload/complete to actually publish the finalize job
+  // (see below), which makes finalize explicit and retryable.
   //
   // Exempt from the global rate limiter: one request per CHUNK_SIZE (2MB,
   // see FileBrowserPanel.vue), so a large file alone can need thousands of
@@ -332,12 +334,20 @@ export async function fileRoutes(app: FastifyInstance) {
     const uploadId    = req.headers["x-upload-id"]    as string
     const chunkIndex  = parseInt(req.headers["x-chunk-index"]  as string, 10)
     const totalChunks = parseInt(req.headers["x-total-chunks"] as string, 10)
+    const chunkOffset = parseInt(req.headers["x-chunk-offset"] as string, 10)
     const rawFileName = decodeURIComponent(req.headers["x-file-name"] as string ?? "")
     const fileName    = basename(rawFileName)
     const destDir     = normalize(decodeURIComponent(req.headers["x-dest-dir"]  as string ?? ""))
 
-    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || !fileName || !destDir)
+    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || isNaN(chunkOffset) || !fileName || !destDir)
       return reply.status(400).send("Missing upload metadata")
+
+    // uploadId ends up in a filename on disk — enforce an opaque-token shape.
+    if (!/^[A-Za-z0-9-]{1,64}$/.test(uploadId))
+      return reply.status(400).send("Invalid upload id")
+
+    if (chunkOffset < 0 || (chunkIndex === 0 && chunkOffset !== 0))
+      return reply.status(400).send("Invalid chunk offset")
 
     if (totalChunks > MAX_CHUNKS)
       return reply.status(400).send(`totalChunks exceeds maximum of ${MAX_CHUNKS}`)
@@ -355,46 +365,49 @@ export async function fileRoutes(app: FastifyInstance) {
       if (!linuxUser) return reply.status(500).send("User has no Linux account configured")
 
       // Disk preflight — only done once, when the upload state is created.
-      // X-Total-Bytes is optional (older clients / back-compat): if it's
-      // absent or not a number, skip the check entirely rather than guessing.
       const totalBytesHeader = req.headers["x-total-bytes"] as string | undefined
       const totalBytes = totalBytesHeader !== undefined ? parseInt(totalBytesHeader, 10) : NaN
-      if (!isNaN(totalBytes)) {
-        try {
-          const { free } = await requestSync<{ total: number; free: number }>(
-            "root.fs.diskusage",
-            { path: destDir, allowedRoot: allowedRoot ?? "" },
-          )
-          if (free < totalBytes * 1.02)
-            return reply.status(507).send("Not enough disk space for this upload")
-        } catch (e: any) {
-          if (e?.code === "EACCES") return reply.status(403).send("Permission denied")
-          if (e?.code === "ENOENT") return reply.status(404).send("Not found")
-          return reply.status(500).send(e?.message ?? "Disk usage check failed")
-        }
+      if (isNaN(totalBytes) || totalBytes < 0)
+        return reply.status(400).send("Missing or invalid X-Total-Bytes")
+      try {
+        const { free } = await requestSync<{ total: number; free: number }>(
+          "root.fs.diskusage",
+          { path: destDir, allowedRoot: allowedRoot ?? "" },
+        )
+        if (free < totalBytes * 1.02)
+          return reply.status(507).send("Not enough disk space for this upload")
+      } catch (e: any) {
+        if (e?.code === "EACCES") return reply.status(403).send("Permission denied")
+        if (e?.code === "ENOENT") return reply.status(404).send("Not found")
+        return reply.status(500).send(e?.message ?? "Disk usage check failed")
       }
 
-      // Staging dir lives directly inside destDir — same filesystem, no double-write.
-      const stagingDir = join(destDir, `.uploads-${uploadId}`)
+      // Temp file lives directly inside destDir — same filesystem, so the
+      // finalize rename is atomic and there is no double-write.
+      const tempPath = join(destDir, `.upload-${uploadId}.part`)
       const newState: UploadState = {
-        received: new Set(), totalChunks, fileName, destDir, stagingDir,
+        received: new Set(), totalChunks, fileName, destDir, tempPath,
         linuxUser, allowedRoot: allowedRoot ?? "", createdAt: Date.now(),
-        totalBytes: isNaN(totalBytes) ? undefined : totalBytes,
+        totalBytes,
       }
       setUpload(uploadId, newState)
       state = newState
     }
 
-    // Delegate the write to the worker: it creates the staging dir on first
-    // chunk and writes the binary data as the linuxUser (seteuid).
+    const body = req.body as Buffer
+    if (chunkOffset + body.length > state.totalBytes)
+      return reply.status(400).send("Chunk exceeds declared upload size")
+
+    // Delegate the write to the worker: it writes the binary data at the
+    // given byte offset into the temp file as the linuxUser (seteuid).
     try {
       await writeChunk({
         uploadId,
-        chunkIndex,
+        offset:        chunkOffset,
         destDir:       state.destDir,
         linuxUsername: state.linuxUser,
         allowedRoot:   state.allowedRoot,
-        data:          req.body as Buffer,
+        data:          body,
       })
     } catch (e: any) {
       deleteUpload(uploadId)
@@ -405,9 +418,9 @@ export async function fileRoutes(app: FastifyInstance) {
 
     state.received.add(chunkIndex)
 
-    // All chunks staged — but assembly is no longer auto-triggered here.
+    // All chunks written — but finalize is no longer auto-triggered here.
     // The client must call POST /files/upload/complete (with the expected
-    // sha256) to actually publish the assemble job; that makes assembly an
+    // sha256) to actually publish the finalize job; that makes finalize an
     // explicit, retryable step instead of tying it to whichever request
     // happens to land last. State is deliberately kept (not deleted) so a
     // retry of /complete can still find it — UPLOAD_TTL GC bounds the leak.
@@ -416,14 +429,16 @@ export async function fileRoutes(app: FastifyInstance) {
 
   // ── POST /files/upload/complete ───────────────────────────────────────────
   //
-  // Explicit, retryable assembly trigger. The chunk route only stages bytes
-  // now (see above) — this is the one place that publishes fs.assemble, and
-  // it can be called again (e.g. after a client crash/timeout waiting on the
-  // job) as long as the upload state + staged chunks are still around: it
-  // republishes the same assemble job from the still-staged chunks.
+  // Explicit, retryable finalize trigger. The chunk route only writes bytes
+  // into the upload temp file now (see above) — this is the one place that
+  // publishes fs.finalize, and it can be called again (e.g. after a client
+  // crash/timeout waiting on the job) as long as the upload state + temp file
+  // are still around: it republishes the same finalize job against the same
+  // temp file. The worker hashes the temp file, verifies it against
+  // expectedSha, and atomically renames it to destFile.
   //
   // Body: { uploadId: string, sha256: string } — sha256 is passed through to
-  // the worker as expectedSha so assembly is verified end-to-end.
+  // the worker as expectedSha so the write is verified end-to-end.
   app.post("/files/upload/complete", async (req, reply) => {
     const user = authFromRequest(req)
     if (!user) return reply.status(401).send("Unauthorized")
@@ -440,18 +455,16 @@ export async function fileRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: "Upload incomplete", missing })
     }
 
-    const chunks   = Array.from({ length: state.totalChunks }, (_, i) => join(state.stagingDir, `${i}.part`))
     const destFile = join(state.destDir, state.fileName)
 
     const jobId = await publishJob(
-      "fs.assemble",
+      "fs.finalize",
       {
         linuxUsername: state.linuxUser,
+        tempFile:      state.tempPath,
         destFile,
-        chunks,
-        stagingDir: state.stagingDir,
-        allowedRoot: state.allowedRoot,
-        expectedSha: sha256,
+        allowedRoot:   state.allowedRoot,
+        expectedSha:   sha256,
       },
       user.userId,
     )
@@ -501,8 +514,8 @@ export async function fileRoutes(app: FastifyInstance) {
 
     publishJob(
       "fs.delete",
-      { linuxUsername: state.linuxUser, path: state.stagingDir, allowedRoot: state.allowedRoot },
-    ).catch(err => app.log.error(err, "Failed to clean up upload staging dir on cancel"))
+      { linuxUsername: state.linuxUser, path: state.tempPath, allowedRoot: state.allowedRoot },
+    ).catch(err => app.log.error(err, "Failed to clean up upload temp file on cancel"))
 
     return reply.send({ ok: true })
   })

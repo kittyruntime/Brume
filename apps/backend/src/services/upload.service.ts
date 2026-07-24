@@ -11,11 +11,11 @@ export interface UploadState {
   totalChunks: number
   fileName:    string
   destDir:     string
-  stagingDir:  string
+  tempPath:    string
   linuxUser:   string   // guaranteed non-null at creation
   allowedRoot: string   // Place root destDir was validated against ("" = admin/unrestricted)
   createdAt:   number
-  totalBytes?: number   // from X-Total-Bytes on the first chunk; used for the disk preflight only
+  totalBytes:  number   // from X-Total-Bytes on the first chunk (required); bounds the disk preflight and every chunk's offset
 }
 
 const uploadState = new Map<string, UploadState>()

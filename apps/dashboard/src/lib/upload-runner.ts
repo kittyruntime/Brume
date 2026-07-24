@@ -120,6 +120,7 @@ async function sendChunkWithRetry(
           'Content-Type':   'application/octet-stream',
           'X-Upload-Id':    uploadId,
           'X-Chunk-Index':  String(index),
+          'X-Chunk-Offset': String(index * CHUNK_SIZE),
           'X-Total-Chunks': String(totalChunks),
           'X-Total-Bytes':  String(file.size),
           'X-File-Name':    encodeURIComponent(file.name),
@@ -154,9 +155,9 @@ async function sendChunkWithRetry(
   throw new Error('Upload failed: exhausted retries')
 }
 
-// Trigger the explicit, retryable assembly of the staged chunks. The server
-// verifies the whole-file SHA-256 during assembly, so a `done` here means the
-// destination file matches what the client hashed. Returns the assemble jobId.
+// Trigger the explicit, retryable finalize of the staged chunks. The server
+// verifies the whole-file SHA-256 during finalize, so a `done` here means the
+// destination file matches what the client hashed. Returns the finalize jobId.
 async function completeUpload(uploadId: string, sha256: string, ac: AbortController): Promise<string> {
   const resp = await fetch(`${BASE_URL}/files/upload/complete`, {
     method: 'POST',
@@ -175,15 +176,15 @@ async function completeUpload(uploadId: string, sha256: string, ac: AbortControl
   return jobId
 }
 
-// Map a failed assemble job to a user-facing message. The worker publishes the
+// Map a failed finalize job to a user-facing message. The worker publishes the
 // fsError *message* (not its code), so a checksum mismatch surfaces as
 // "checksum mismatch — file corrupted in transfer" — a Retry re-hashes,
 // re-sends the missing chunks and re-verifies, so it's worth surfacing plainly.
-function assembleErrorMessage(error: string | null): string {
+function finalizeErrorMessage(error: string | null): string {
   if (error && /checksum/i.test(error)) {
     return 'File corrupted during transfer — please retry'
   }
-  return error || 'Failed to assemble the file on the server'
+  return error || 'Failed to finalize the file on the server'
 }
 
 async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<void> {
@@ -230,21 +231,37 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
       uploads.updateProgress(t.id, sentChunks, chunkByteLength(file, i))
     }
 
-    // Explicit, retryable completion: the server assembles the staged chunks
+    // Explicit, retryable completion: the server finalizes the staged chunks
     // and verifies this whole-file digest before accepting the file. A lost
     // response no longer means a false success — completion is idempotent
     // while the upload state + staging survive (bounded by UPLOAD_TTL GC).
     const sha = hasher.digest('hex')
     const jobId = await completeUpload(uploadId, sha, ac)
 
-    // Server-side assembly streams+hashes the whole file, so give the poll a
+    // Server-side finalize hashes the whole file before the atomic rename —
+    // surface that as a distinct "verifying" phase instead of a bar stuck
+    // at 100%.
+    uploads.setStatus(t.id, 'verifying')
+
+    // Server-side finalize streams+hashes the whole file, so give the poll a
     // deadline that scales with size (assume a pessimistic ~10 MB/s floor)
     // rather than the 30 s default — otherwise a large file times out into a
-    // false "failed" while the assemble is still legitimately running.
-    const assembleDeadline = 60_000 + Math.ceil(file.size / (10 * 1024 * 1024)) * 1000
-    const res = await pollJobResult(jobId, assembleDeadline)
+    // false "failed" while finalize is still legitimately running.
+    const finalizeDeadline = 60_000 + Math.ceil(file.size / (10 * 1024 * 1024)) * 1000
+    const res = await pollJobResult(jobId, finalizeDeadline)
     if (res.status !== 'completed') {
-      throw new Error(assembleErrorMessage(res.error))
+      // A checksum mismatch means the worker already deleted the temp file,
+      // but the server still believes every chunk is staged - a plain retry
+      // would skip all chunks and finalize a missing file. Drop the server
+      // state so Retry restarts the upload from scratch.
+      if (res.error && /checksum/i.test(res.error)) {
+        fetch(`${BASE_URL}/files/upload/cancel`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadId }),
+        }).catch(() => {})
+      }
+      throw new Error(finalizeErrorMessage(res.error))
     }
     uploads.setStatus(t.id, 'done')
     clearPersisted(t.id)
@@ -321,7 +338,7 @@ export function resumeUpload(id: string, file: File, opts: UploadOpts = {}): voi
  *     drop the stale bookmark, nothing to show.
  *   - known and incomplete → register an `interrupted` transfer so the tray
  *     shows "re-select to resume" instead of silently losing the progress.
- *   - known and already fully staged (assemble was still pending on reload) →
+ *   - known and already fully staged (finalize was still pending on reload) →
  *     leave the persisted entry alone; nothing to hydrate as interrupted,
  *     and `runUpload`/`clearPersisted` elsewhere will resolve it normally.
  *
