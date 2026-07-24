@@ -184,7 +184,7 @@ function finalizeErrorMessage(error: string | null): string {
   if (error && /checksum/i.test(error)) {
     return 'File corrupted during transfer — please retry'
   }
-  return error || 'Failed to assemble the file on the server'
+  return error || 'Failed to finalize the file on the server'
 }
 
 async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<void> {
