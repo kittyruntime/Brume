@@ -5,6 +5,7 @@ export type TransferKind = 'upload' | 'copy' | 'move'
 export type TransferStatus =
   | 'queued'
   | 'uploading'
+  | 'verifying'
   | 'paused'
   | 'error'
   | 'done'

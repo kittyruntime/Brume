@@ -120,6 +120,7 @@ async function sendChunkWithRetry(
           'Content-Type':   'application/octet-stream',
           'X-Upload-Id':    uploadId,
           'X-Chunk-Index':  String(index),
+          'X-Chunk-Offset': String(index * CHUNK_SIZE),
           'X-Total-Chunks': String(totalChunks),
           'X-Total-Bytes':  String(file.size),
           'X-File-Name':    encodeURIComponent(file.name),
@@ -154,9 +155,9 @@ async function sendChunkWithRetry(
   throw new Error('Upload failed: exhausted retries')
 }
 
-// Trigger the explicit, retryable assembly of the staged chunks. The server
-// verifies the whole-file SHA-256 during assembly, so a `done` here means the
-// destination file matches what the client hashed. Returns the assemble jobId.
+// Trigger the explicit, retryable finalize of the staged chunks. The server
+// verifies the whole-file SHA-256 during finalize, so a `done` here means the
+// destination file matches what the client hashed. Returns the finalize jobId.
 async function completeUpload(uploadId: string, sha256: string, ac: AbortController): Promise<string> {
   const resp = await fetch(`${BASE_URL}/files/upload/complete`, {
     method: 'POST',
@@ -175,11 +176,11 @@ async function completeUpload(uploadId: string, sha256: string, ac: AbortControl
   return jobId
 }
 
-// Map a failed assemble job to a user-facing message. The worker publishes the
+// Map a failed finalize job to a user-facing message. The worker publishes the
 // fsError *message* (not its code), so a checksum mismatch surfaces as
 // "checksum mismatch — file corrupted in transfer" — a Retry re-hashes,
 // re-sends the missing chunks and re-verifies, so it's worth surfacing plainly.
-function assembleErrorMessage(error: string | null): string {
+function finalizeErrorMessage(error: string | null): string {
   if (error && /checksum/i.test(error)) {
     return 'File corrupted during transfer — please retry'
   }
@@ -237,6 +238,11 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
     const sha = hasher.digest('hex')
     const jobId = await completeUpload(uploadId, sha, ac)
 
+    // Server-side finalize hashes the whole file before the atomic rename —
+    // surface that as a distinct "verifying" phase instead of a bar stuck
+    // at 100%.
+    uploads.setStatus(t.id, 'verifying')
+
     // Server-side assembly streams+hashes the whole file, so give the poll a
     // deadline that scales with size (assume a pessimistic ~10 MB/s floor)
     // rather than the 30 s default — otherwise a large file times out into a
@@ -244,7 +250,7 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
     const assembleDeadline = 60_000 + Math.ceil(file.size / (10 * 1024 * 1024)) * 1000
     const res = await pollJobResult(jobId, assembleDeadline)
     if (res.status !== 'completed') {
-      throw new Error(assembleErrorMessage(res.error))
+      throw new Error(finalizeErrorMessage(res.error))
     }
     uploads.setStatus(t.id, 'done')
     clearPersisted(t.id)
