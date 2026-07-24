@@ -108,7 +108,8 @@ The script:
 5. Applies the database schema
 6. Seeds an `admin / admin` account
 7. Registers and starts three systemd services: `hsi-nats`, `hsi-root-worker`, `hsi`
-Older installs that used the previous default name (`app`) are migrated in place automatically on their next update.
+
+   Older installs that used the previous default name (`app`) are migrated in place automatically on their next update.
 8. Configures nginx if present
 
 > **Change the admin password immediately after first login.**
