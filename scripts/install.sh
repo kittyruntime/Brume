@@ -75,6 +75,9 @@ mlog() { echo "[$(date '+%F %T')] $*" >> "$MIGRATE_LOG"; }
 detect_legacy_app_install() {
   [[ "$APP_NAME" == "hsi" ]] || return 1
   [[ -f /etc/systemd/system/app.service || -d /opt/app ]] || return 1
+  if [[ -e /opt/hsi && ! -d /opt/hsi ]]; then
+    die "/opt/hsi exists but is not a directory - resolve manually, then re-run."
+  fi
   if [[ -d /opt/app && -d /opt/hsi && -n "$(ls -A /opt/hsi 2>/dev/null)" ]]; then
     die "Both /opt/app and a non-empty /opt/hsi exist - resolve manually, then re-run."
   fi
@@ -106,6 +109,10 @@ migrate_legacy_app_install() {
     if pgrep -u app >/dev/null 2>&1; then
       ps -u app -o pid,cmd >&2
       die "Processes still running as user 'app' (listed above) - stop them and re-run."
+    fi
+
+    if id hsi &>/dev/null; then
+      die "Both 'app' and 'hsi' users exist - resolve manually, then re-run."
     fi
 
     # 4. Rename user in place. uid is preserved, so file ownership everywhere
@@ -154,11 +161,26 @@ cleanup_legacy_app_units() {
     rm -f "/etc/systemd/system/$unit"
   done
   rm -f /usr/local/bin/app-check-update
+  rm -f /usr/local/bin/app-root-worker
   systemctl daemon-reload
   systemctl reset-failed 'app*' 2>/dev/null || true
+
+  if [[ -e /etc/nginx/sites-enabled/app || -e /etc/nginx/sites-available/app ]]; then
+    rm -f /etc/nginx/sites-enabled/app /etc/nginx/sites-available/app
+    nginx -t 2>/dev/null && systemctl reload nginx || true
+    mlog "legacy nginx site removed"
+  fi
+
   mlog "legacy unit files removed - migration complete"
   success "Legacy 'app' units removed (migrated install now fully 'hsi')"
 }
+
+# Migrate a legacy "app"-named install FIRST - before either mode branch can
+# create the hsi user (release mode's useradd) or resolve paths, and before
+# fresh/update detection reads the DB under the new /opt/hsi location.
+if detect_legacy_app_install; then
+  migrate_legacy_app_install
+fi
 
 echo -e "${BOLD}"
 echo "  Install / Update — $(date '+%Y-%m-%d %H:%M')"
@@ -264,12 +286,6 @@ else
   NPM_BIN="$(dirname "$NODE_BIN")/npm"
   success "Node: $NODE_BIN"
 
-fi
-
-# Migrate a legacy "app"-named install in place BEFORE fresh/update detection,
-# so the moved /opt/hsi DB is what IS_UPDATE and the backup logic see.
-if detect_legacy_app_install; then
-  migrate_legacy_app_install
 fi
 
 # =============================================================================
