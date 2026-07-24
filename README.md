@@ -125,7 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/
 ### Pin a version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.28.1 bash
+curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.39.0 bash
 ```
 
 ---

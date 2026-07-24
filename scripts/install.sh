@@ -81,6 +81,12 @@ detect_legacy_app_install() {
   if [[ -d /opt/app && -d /opt/hsi && -n "$(ls -A /opt/hsi 2>/dev/null)" ]]; then
     die "Both /opt/app and a non-empty /opt/hsi exist - resolve manually, then re-run."
   fi
+  if id app &>/dev/null && id hsi &>/dev/null; then
+    die "Both 'app' and 'hsi' users exist - resolve manually, then re-run."
+  fi
+  if id app &>/dev/null && ! id hsi &>/dev/null && getent group hsi >/dev/null 2>&1; then
+    die "Group 'hsi' already exists but user 'app' is not yet renamed - resolve manually, then re-run."
+  fi
   return 0
 }
 
@@ -135,6 +141,12 @@ migrate_legacy_app_install() {
     [[ -d /opt/hsi ]] && rmdir /opt/hsi
     mv /opt/app /opt/hsi
     mlog "/opt/app moved to /opt/hsi"
+
+    # A queued update marker must not survive the move: the new
+    # hsi-update-apply.path fires the instant it is enabled if the file
+    # exists, launching a second concurrent install.
+    rm -f /opt/hsi/.pending-update
+    mlog "stale .pending-update removed"
   fi
 
   # 6. Move the config dir and rewrite absolute paths inside it.
@@ -162,6 +174,9 @@ cleanup_legacy_app_units() {
   done
   rm -f /usr/local/bin/app-check-update
   rm -f /usr/local/bin/app-root-worker
+  rm -f /etc/logrotate.d/app
+  rm -rf /var/lib/app
+  systemctl stop app-update-apply.path app-update-check.timer 2>/dev/null || true
   systemctl daemon-reload
   systemctl reset-failed 'app*' 2>/dev/null || true
 
@@ -179,6 +194,20 @@ cleanup_legacy_app_units() {
 # create the hsi user (release mode's useradd) or resolve paths, and before
 # fresh/update detection reads the DB under the new /opt/hsi location.
 if detect_legacy_app_install; then
+  if [[ "$FROM_SOURCE" -eq 0 ]]; then
+    # Never start mutating the box for a release asset that does not exist
+    # (e.g. a pre-rename VERSION pin): resolve + normalize the version and
+    # HEAD-check the tarball now. Failing here changes NOTHING on disk.
+    if [[ -z "${VERSION:-}" ]]; then
+      VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | grep -oP '"tag_name":\s*"\K[^"]+')
+      [[ -n "$VERSION" ]] || die "Could not fetch latest release from GitHub."
+    fi
+    VERSION="v${VERSION#v}"
+    PRE_URL="https://github.com/${REPO}/releases/download/${VERSION}/${APP_NAME}-${VERSION}-linux-amd64.tar.gz"
+    curl -fsIL --max-time 30 "$PRE_URL" >/dev/null \
+      || die "Release asset not found for ${VERSION} (pre-rename version pin?) - nothing was changed. Re-run without VERSION to use the latest release."
+  fi
   migrate_legacy_app_install
 fi
 
@@ -825,6 +854,8 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   success "Version recorded → $APP_DIR/VERSION"
 fi
 
+cleanup_legacy_app_units
+
 # =============================================================================
 # COMMON — nginx reverse proxy (optional)
 # =============================================================================
@@ -882,8 +913,6 @@ EOF
   nginx -t && systemctl reload nginx
   success "nginx configured → $NGINX_CONF"
 fi
-
-cleanup_legacy_app_units
 
 # =============================================================================
 # Summary
