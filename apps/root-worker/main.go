@@ -178,6 +178,12 @@ func ensureConsumer(js nats.JetStreamContext) {
 
 // ── Request-reply handlers ────────────────────────────────────────────────────
 
+// maxUploadOffset bounds WriteAt targets to the backend's own upload ceiling
+// (MAX_CHUNKS = 131072 chunks of 2 MiB = 256 GiB) so a forged offset cannot
+// create a multi-terabyte sparse file that the serial finalize job would
+// then hash for hours.
+const maxUploadOffset = int64(131072) * 2 * 1024 * 1024
+
 // handleWriteChunk writes a single upload chunk at its byte offset directly
 // into <destDir>/.upload-<uploadId>.part as the target user. Metadata arrives
 // in the "X-Meta" NATS header; raw binary in msg.Data. Retried chunks rewrite
@@ -208,6 +214,10 @@ func handleWriteChunk(nc *nats.Conn, msg *nats.Msg) {
 	}
 	if meta.Offset < 0 {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "negative offset"})
+		return
+	}
+	if meta.Offset > maxUploadOffset {
+		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "offset exceeds maximum upload size"})
 		return
 	}
 	if fsErr := validateScoped(meta.DestDir, meta.AllowedRoot); fsErr != nil {

@@ -307,8 +307,9 @@ export async function fileRoutes(app: FastifyInstance) {
   //   X-Chunk-Offset   — byte offset of this chunk within the final file
   //   X-File-Name      — URI-encoded filename
   //   X-Dest-Dir       — URI-encoded destination directory
-  //   X-Total-Bytes    — optional; total upload size, used for a one-time
-  //                       disk-space preflight when the upload is created
+  //   X-Total-Bytes    — required on the first chunk; total upload size,
+  //                       used for a one-time disk-space preflight and to
+  //                       bound every subsequent chunk's byte offset
   //
   // Body: raw binary (application/octet-stream)
   //
@@ -364,23 +365,21 @@ export async function fileRoutes(app: FastifyInstance) {
       if (!linuxUser) return reply.status(500).send("User has no Linux account configured")
 
       // Disk preflight — only done once, when the upload state is created.
-      // X-Total-Bytes is optional (older clients / back-compat): if it's
-      // absent or not a number, skip the check entirely rather than guessing.
       const totalBytesHeader = req.headers["x-total-bytes"] as string | undefined
       const totalBytes = totalBytesHeader !== undefined ? parseInt(totalBytesHeader, 10) : NaN
-      if (!isNaN(totalBytes)) {
-        try {
-          const { free } = await requestSync<{ total: number; free: number }>(
-            "root.fs.diskusage",
-            { path: destDir, allowedRoot: allowedRoot ?? "" },
-          )
-          if (free < totalBytes * 1.02)
-            return reply.status(507).send("Not enough disk space for this upload")
-        } catch (e: any) {
-          if (e?.code === "EACCES") return reply.status(403).send("Permission denied")
-          if (e?.code === "ENOENT") return reply.status(404).send("Not found")
-          return reply.status(500).send(e?.message ?? "Disk usage check failed")
-        }
+      if (isNaN(totalBytes) || totalBytes < 0)
+        return reply.status(400).send("Missing or invalid X-Total-Bytes")
+      try {
+        const { free } = await requestSync<{ total: number; free: number }>(
+          "root.fs.diskusage",
+          { path: destDir, allowedRoot: allowedRoot ?? "" },
+        )
+        if (free < totalBytes * 1.02)
+          return reply.status(507).send("Not enough disk space for this upload")
+      } catch (e: any) {
+        if (e?.code === "EACCES") return reply.status(403).send("Permission denied")
+        if (e?.code === "ENOENT") return reply.status(404).send("Not found")
+        return reply.status(500).send(e?.message ?? "Disk usage check failed")
       }
 
       // Temp file lives directly inside destDir — same filesystem, so the
@@ -389,14 +388,14 @@ export async function fileRoutes(app: FastifyInstance) {
       const newState: UploadState = {
         received: new Set(), totalChunks, fileName, destDir, tempPath,
         linuxUser, allowedRoot: allowedRoot ?? "", createdAt: Date.now(),
-        totalBytes: isNaN(totalBytes) ? undefined : totalBytes,
+        totalBytes,
       }
       setUpload(uploadId, newState)
       state = newState
     }
 
     const body = req.body as Buffer
-    if (state.totalBytes !== undefined && chunkOffset + body.length > state.totalBytes)
+    if (chunkOffset + body.length > state.totalBytes)
       return reply.status(400).send("Chunk exceeds declared upload size")
 
     // Delegate the write to the worker: it writes the binary data at the

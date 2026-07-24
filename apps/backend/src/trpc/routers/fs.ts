@@ -251,9 +251,9 @@ export const fsRouter = router({
       }
 
       const uploadId = crypto.randomUUID()
-      const destDir   = dirname(p)
-      const tempPath  = join(destDir, `.upload-${uploadId}.part`)
-      const data      = Buffer.from(input.content, "utf-8")
+      const destDir  = dirname(p)
+      const tempPath = join(destDir, `.upload-${uploadId}.part`)
+      const data     = Buffer.from(input.content, "utf-8")
 
       try {
         await writeChunk({

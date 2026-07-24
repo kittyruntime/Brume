@@ -231,7 +231,7 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
       uploads.updateProgress(t.id, sentChunks, chunkByteLength(file, i))
     }
 
-    // Explicit, retryable completion: the server assembles the staged chunks
+    // Explicit, retryable completion: the server finalizes the staged chunks
     // and verifies this whole-file digest before accepting the file. A lost
     // response no longer means a false success — completion is idempotent
     // while the upload state + staging survive (bounded by UPLOAD_TTL GC).
@@ -243,13 +243,24 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
     // at 100%.
     uploads.setStatus(t.id, 'verifying')
 
-    // Server-side assembly streams+hashes the whole file, so give the poll a
+    // Server-side finalize streams+hashes the whole file, so give the poll a
     // deadline that scales with size (assume a pessimistic ~10 MB/s floor)
     // rather than the 30 s default — otherwise a large file times out into a
-    // false "failed" while the assemble is still legitimately running.
-    const assembleDeadline = 60_000 + Math.ceil(file.size / (10 * 1024 * 1024)) * 1000
-    const res = await pollJobResult(jobId, assembleDeadline)
+    // false "failed" while finalize is still legitimately running.
+    const finalizeDeadline = 60_000 + Math.ceil(file.size / (10 * 1024 * 1024)) * 1000
+    const res = await pollJobResult(jobId, finalizeDeadline)
     if (res.status !== 'completed') {
+      // A checksum mismatch means the worker already deleted the temp file,
+      // but the server still believes every chunk is staged - a plain retry
+      // would skip all chunks and finalize a missing file. Drop the server
+      // state so Retry restarts the upload from scratch.
+      if (res.error && /checksum/i.test(res.error)) {
+        fetch(`${BASE_URL}/files/upload/cancel`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadId }),
+        }).catch(() => {})
+      }
       throw new Error(finalizeErrorMessage(res.error))
     }
     uploads.setStatus(t.id, 'done')
@@ -327,7 +338,7 @@ export function resumeUpload(id: string, file: File, opts: UploadOpts = {}): voi
  *     drop the stale bookmark, nothing to show.
  *   - known and incomplete → register an `interrupted` transfer so the tray
  *     shows "re-select to resume" instead of silently losing the progress.
- *   - known and already fully staged (assemble was still pending on reload) →
+ *   - known and already fully staged (finalize was still pending on reload) →
  *     leave the persisted entry alone; nothing to hydrate as interrupted,
  *     and `runUpload`/`clearPersisted` elsewhere will resolve it normally.
  *
