@@ -19,7 +19,7 @@ const TASK_STREAM = {
     "root.fs.move",
     "root.fs.rename",
     "root.fs.delete",
-    "root.fs.assemble",
+    "root.fs.finalize",
     "root.fs.chmod",
     "root.fs.chown",
     "root.fs.zip",
@@ -196,11 +196,11 @@ export async function requestReadChunk(
   return Buffer.from(msg.data)
 }
 
-// Write a chunk directly into destDir via the worker (no /tmp involved).
+// Write a chunk at its byte offset into the upload temp file via the worker.
 // Binary chunk data is sent as the raw message body; metadata goes in a header.
 export async function writeChunk(opts: {
   uploadId:      string
-  chunkIndex:    number
+  offset:        number
   destDir:       string
   linuxUsername: string
   allowedRoot:   string
@@ -210,7 +210,7 @@ export async function writeChunk(opts: {
   const h = headers()
   h.set("X-Meta", JSON.stringify({
     uploadId:      opts.uploadId,
-    chunkIndex:    opts.chunkIndex,
+    offset:        opts.offset,
     destDir:       opts.destDir,
     linuxUsername: opts.linuxUsername,
     allowedRoot:   opts.allowedRoot,

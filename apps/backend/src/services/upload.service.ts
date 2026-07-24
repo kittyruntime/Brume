@@ -11,7 +11,7 @@ export interface UploadState {
   totalChunks: number
   fileName:    string
   destDir:     string
-  stagingDir:  string
+  tempPath:    string
   linuxUser:   string   // guaranteed non-null at creation
   allowedRoot: string   // Place root destDir was validated against ("" = admin/unrestricted)
   createdAt:   number
