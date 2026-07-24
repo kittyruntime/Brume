@@ -225,11 +225,13 @@ func handleWriteChunk(nc *nats.Conn, msg *nats.Msg) {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 		if _, err := f.WriteAt(data, meta.Offset); err != nil {
+			f.Close()
 			return err
 		}
-		return nil
+		// Close errors matter here: on some filesystems ENOSPC only
+		// surfaces at close, and an acked chunk must be durably written.
+		return f.Close()
 	}); err != nil {
 		fsErr = toFsErr(err)
 	}
