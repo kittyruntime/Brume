@@ -11,7 +11,7 @@ on:
         required: true
 
 env:
-  APP_NAME: app
+  APP_NAME: hsi
 
 permissions:
   contents: write
