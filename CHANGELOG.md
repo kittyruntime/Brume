@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-07-24
+
 ### Changed
 - **Faster, clearer upload finalization**: uploaded chunks now stream into a single
   temporary file instead of a folder of parts, so finishing an upload no longer
@@ -591,7 +593,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.37.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.38.0...HEAD
+[1.38.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.37.0...v1.38.0
 [1.37.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.36.0...v1.37.0
 [1.36.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.35.0...v1.36.0
 [1.35.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.34.1...v1.35.0
