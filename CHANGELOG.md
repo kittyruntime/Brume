@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The app is now installed under its real name, `hsi`**: systemd services become
+  `hsi`, `hsi-nats` and `hsi-root-worker` (plus `hsi-update-*`), the install
+  directory moves to `/opt/hsi` and the service account is renamed to `hsi`.
+  Existing installs that used the old default name (`app`) are migrated in place
+  automatically on their next update - services, user, data directory and config
+  move over with no manual steps and no data loss; a migration log is written to
+  `/var/log/hsi/migrate-app-to-hsi.log`.
+
 ## [1.38.0] - 2026-07-24
 
 ### Changed
