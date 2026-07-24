@@ -14,7 +14,7 @@
 # Re-run at any time to update; existing data and secrets are preserved.
 #
 # Environment overrides (both modes):
-#   APP_NAME              App identifier             (default: app)
+#   APP_NAME              App identifier             (default: hsi)
 #   BACKEND_PORT          API port                   (default: 9001)
 #   NATS_SERVER_VERSION   NATS binary version        (default: v2.10.24)
 #   SKIP_NGINX            Set to 1 to skip nginx     (default: 0)
@@ -28,7 +28,7 @@
 
 set -euo pipefail
 
-APP_NAME="${APP_NAME:-app}"
+APP_NAME="${APP_NAME:-hsi}"
 REPO="kittyruntime/home-server-interface"
 
 # ── Mode detection ─────────────────────────────────────────────────────────────
@@ -56,6 +56,160 @@ step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
 # ── Must run as root ───────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Run with sudo: sudo $0"
+
+# ── Legacy "app" install migration (app -> hsi rename) ────────────────────────
+# Older installs used APP_NAME=app: units app*, /opt/app, user/group "app",
+# /etc/app. When this run targets the default "hsi" and such an install is
+# present, migrate it in place. Forward-only and idempotent: every step checks
+# real on-disk state, so a crashed migration resumes on the next run. Legacy
+# unit FILES are only removed in cleanup_legacy_app_units, after the new hsi*
+# units are enabled — the box is never left without unit files.
+LEGACY_MIGRATED=0
+LEGACY_UNITS=(app.service app-nats.service app-root-worker.service
+  app-update-check.service app-update-check.timer
+  app-update-apply.service app-update-apply.path)
+MIGRATE_LOG="/var/log/hsi/migrate-app-to-hsi.log"
+
+mlog() { echo "[$(date '+%F %T')] $*" >> "$MIGRATE_LOG"; }
+
+detect_legacy_app_install() {
+  [[ "$APP_NAME" == "hsi" ]] || return 1
+  [[ -f /etc/systemd/system/app.service || -d /opt/app ]] || return 1
+  if [[ -e /opt/hsi && ! -d /opt/hsi ]]; then
+    die "/opt/hsi exists but is not a directory - resolve manually, then re-run."
+  fi
+  if [[ -d /opt/app && -d /opt/hsi && -n "$(ls -A /opt/hsi 2>/dev/null)" ]]; then
+    die "Both /opt/app and a non-empty /opt/hsi exist - resolve manually, then re-run."
+  fi
+  if id app &>/dev/null && id hsi &>/dev/null; then
+    die "Both 'app' and 'hsi' users exist - resolve manually, then re-run."
+  fi
+  if id app &>/dev/null && ! id hsi &>/dev/null && getent group hsi >/dev/null 2>&1; then
+    die "Group 'hsi' already exists but user 'app' is not yet renamed - resolve manually, then re-run."
+  fi
+  return 0
+}
+
+migrate_legacy_app_install() {
+  step "Migrating legacy 'app' install to 'hsi'"
+  mkdir -p /var/log/hsi
+  mlog "migration started (pid $$)"
+
+  # 1. Stop legacy services. NEVER app-update-apply.service: during an
+  #    auto-update it is the unit running this very script.
+  for unit in app app-root-worker app-nats app-update-check.timer; do
+    systemctl stop "$unit" 2>/dev/null || true
+  done
+  mlog "legacy services stopped"
+
+  # 2. Disable all legacy units (files stay until cleanup_legacy_app_units).
+  systemctl disable "${LEGACY_UNITS[@]}" 2>/dev/null || true
+  mlog "legacy units disabled"
+
+  if id app &>/dev/null; then
+    # 3. usermod -l fails while processes run as the old user - wait for idle.
+    for _ in $(seq 1 30); do
+      pgrep -u app >/dev/null 2>&1 || break
+      sleep 0.5
+    done
+    if pgrep -u app >/dev/null 2>&1; then
+      ps -u app -o pid,cmd >&2
+      die "Processes still running as user 'app' (listed above) - stop them and re-run."
+    fi
+
+    if id hsi &>/dev/null; then
+      die "Both 'app' and 'hsi' users exist - resolve manually, then re-run."
+    fi
+
+    # 4. Rename user in place. uid is preserved, so file ownership everywhere
+    #    on disk follows without a single chown.
+    usermod -l hsi app
+    mlog "user app renamed to hsi"
+  fi
+  if getent group app >/dev/null 2>&1; then
+    groupmod -n hsi app
+    mlog "group app renamed to hsi"
+  fi
+  if id hsi &>/dev/null; then
+    usermod -d /opt/hsi hsi
+  fi
+
+  # 5. Move the install dir. rmdir first: mv into an existing dir would nest
+  #    /opt/app INSIDE /opt/hsi. detect_legacy_app_install already guaranteed
+  #    a non-empty /opt/hsi cannot reach this point.
+  if [[ -d /opt/app ]]; then
+    [[ -d /opt/hsi ]] && rmdir /opt/hsi
+    mv /opt/app /opt/hsi
+    mlog "/opt/app moved to /opt/hsi"
+
+    # A queued update marker must not survive the move: the new
+    # hsi-update-apply.path fires the instant it is enabled if the file
+    # exists, launching a second concurrent install.
+    rm -f /opt/hsi/.pending-update
+    mlog "stale .pending-update removed"
+  fi
+
+  # 6. Move the config dir and rewrite absolute paths inside it.
+  if [[ -d /etc/app ]]; then
+    if [[ -d /etc/hsi ]]; then
+      rmdir /etc/hsi 2>/dev/null \
+        || die "Both /etc/app and a non-empty /etc/hsi exist - resolve manually, then re-run."
+    fi
+    mv /etc/app /etc/hsi
+    for f in /etc/hsi/nats.conf /etc/hsi/worker.env; do
+      [[ -f "$f" ]] && sed -i 's|/opt/app|/opt/hsi|g; s|/etc/app|/etc/hsi|g' "$f"
+    done
+    mlog "/etc/app moved to /etc/hsi (absolute paths rewritten)"
+  fi
+
+  LEGACY_MIGRATED=1
+  success "Legacy install migrated (log: $MIGRATE_LOG)"
+}
+
+cleanup_legacy_app_units() {
+  [[ "$LEGACY_MIGRATED" -eq 1 ]] || return 0
+  step "Removing legacy 'app' unit files"
+  for unit in "${LEGACY_UNITS[@]}"; do
+    rm -f "/etc/systemd/system/$unit"
+  done
+  rm -f /usr/local/bin/app-check-update
+  rm -f /usr/local/bin/app-root-worker
+  rm -f /etc/logrotate.d/app
+  rm -rf /var/lib/app
+  systemctl stop app-update-apply.path app-update-check.timer 2>/dev/null || true
+  systemctl daemon-reload
+  systemctl reset-failed 'app*' 2>/dev/null || true
+
+  if [[ -e /etc/nginx/sites-enabled/app || -e /etc/nginx/sites-available/app ]]; then
+    rm -f /etc/nginx/sites-enabled/app /etc/nginx/sites-available/app
+    nginx -t 2>/dev/null && systemctl reload nginx || true
+    mlog "legacy nginx site removed"
+  fi
+
+  mlog "legacy unit files removed - migration complete"
+  success "Legacy 'app' units removed (migrated install now fully 'hsi')"
+}
+
+# Migrate a legacy "app"-named install FIRST - before either mode branch can
+# create the hsi user (release mode's useradd) or resolve paths, and before
+# fresh/update detection reads the DB under the new /opt/hsi location.
+if detect_legacy_app_install; then
+  if [[ "$FROM_SOURCE" -eq 0 ]]; then
+    # Never start mutating the box for a release asset that does not exist
+    # (e.g. a pre-rename VERSION pin): resolve + normalize the version and
+    # HEAD-check the tarball now. Failing here changes NOTHING on disk.
+    if [[ -z "${VERSION:-}" ]]; then
+      VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | grep -oP '"tag_name":\s*"\K[^"]+')
+      [[ -n "$VERSION" ]] || die "Could not fetch latest release from GitHub."
+    fi
+    VERSION="v${VERSION#v}"
+    PRE_URL="https://github.com/${REPO}/releases/download/${VERSION}/${APP_NAME}-${VERSION}-linux-amd64.tar.gz"
+    curl -fsIL --max-time 30 "$PRE_URL" >/dev/null \
+      || die "Release asset not found for ${VERSION} (pre-rename version pin?) - nothing was changed. Re-run without VERSION to use the latest release."
+  fi
+  migrate_legacy_app_install
+fi
 
 echo -e "${BOLD}"
 echo "  Install / Update — $(date '+%Y-%m-%d %H:%M')"
@@ -700,6 +854,8 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   success "Version recorded → $APP_DIR/VERSION"
 fi
 
+cleanup_legacy_app_units
+
 # =============================================================================
 # COMMON — nginx reverse proxy (optional)
 # =============================================================================
@@ -799,3 +955,8 @@ else
   echo -e "    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | sudo bash"
 fi
 echo ""
+
+if [[ "$LEGACY_MIGRATED" -eq 1 ]]; then
+  echo ""
+  echo -e "  ${YELLOW}Migrated legacy 'app' install -> 'hsi'${NC} (log: $MIGRATE_LOG)"
+fi
