@@ -107,7 +107,8 @@ The script:
 4. Installs the `root-worker` privilege worker
 5. Applies the database schema
 6. Seeds an `admin / admin` account
-7. Registers and starts three systemd services: `app-nats`, `app-root-worker`, `app`
+7. Registers and starts three systemd services: `hsi-nats`, `hsi-root-worker`, `hsi`
+Older installs that used the previous default name (`app`) are migrated in place automatically on their next update.
 8. Configures nginx if present
 
 > **Change the admin password immediately after first login.**
@@ -132,13 +133,13 @@ curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/
 
 | Unit | Role |
 |---|---|
-| `app-nats` | NATS JetStream message broker |
-| `app-root-worker` | Privileged filesystem worker (runs as root) |
-| `app` | Backend API + static file server |
+| `hsi-nats` | NATS JetStream message broker |
+| `hsi-root-worker` | Privileged filesystem worker (runs as root) |
+| `hsi` | Backend API + static file server |
 
 ```bash
-systemctl status app app-root-worker app-nats
-journalctl -u app -f
+systemctl status hsi hsi-root-worker hsi-nats
+journalctl -u hsi -f
 ```
 
 ---

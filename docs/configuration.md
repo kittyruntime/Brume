@@ -23,7 +23,7 @@ environment variables:
 | Variable | Default | Purpose |
 |---|---|---|
 | `VERSION` | latest release | Install/pin a specific tag, e.g. `VERSION=v1.28.1`. |
-| `INSTALL_DIR` | `/opt/app` | Installation directory. |
+| `INSTALL_DIR` | `/opt/hsi` | Installation directory. |
 | `APP_USER` | `app` | System user the backend runs as. |
 | `BACKEND_PORT` | `9001` | API port. |
 | `NATS_SERVER_VERSION` | `v2.10.24` | NATS binary version to download. |
@@ -37,14 +37,14 @@ database and all secrets**, and restarts only the application services.
 
 | Unit | Role |
 |---|---|
-| `app-nats` | NATS JetStream message broker |
-| `app-root-worker` | Privileged filesystem/disk worker (runs as root) |
-| `app` | Backend API + static dashboard server |
+| `hsi-nats` | NATS JetStream message broker |
+| `hsi-root-worker` | Privileged filesystem/disk worker (runs as root) |
+| `hsi` | Backend API + static dashboard server |
 
 ```bash
-systemctl status app app-root-worker app-nats
-journalctl -u app -f            # follow backend logs
-journalctl -u app-root-worker -f
+systemctl status hsi hsi-root-worker hsi-nats
+journalctl -u hsi -f            # follow backend logs
+journalctl -u hsi-root-worker -f
 ```
 
 ## Ports
