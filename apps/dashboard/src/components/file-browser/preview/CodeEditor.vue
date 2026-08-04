@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Compartment } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
@@ -7,6 +7,7 @@ import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirro
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { trpc } from '../../../lib/trpc'
+import { getFormatter, formatContent } from '../../../lib/formatters'
 import { useNotifications } from '../../../lib/notifications'
 
 // Mirrors apps/backend/src/trpc/routers/fs.ts MAX_TEXT_PREVIEW_BYTES — used
@@ -23,6 +24,8 @@ const state = ref<'loading' | 'binary' | 'too-large' | 'error' | 'ready'>('loadi
 const fileSize = ref<number | null>(props.size)
 const saving = ref(false)
 const dirty = ref(false)
+const formatting = ref(false)
+const formatter = computed(() => getFormatter(props.name))
 
 const editorEl = ref<HTMLDivElement | null>(null)
 let view: EditorView | null = null
@@ -50,6 +53,7 @@ function setupEditor(content: string) {
         keymap.of([
           ...defaultKeymap, ...historyKeymap, indentWithTab,
           { key: 'Mod-s', preventDefault: true, run: () => { save(); return true } },
+          { key: 'Shift-Alt-f', preventDefault: true, run: () => { format(); return true } },
         ]),
         languageConf.of([]),
         theme,
@@ -101,6 +105,22 @@ async function save() {
   }
 }
 
+async function format() {
+  if (!view || formatting.value) return
+  const entry = getFormatter(props.name)
+  if (!entry) return
+  formatting.value = true
+  try {
+    const current = view.state.doc.toString()
+    const formatted = await track(`Formatting ${props.name}`, () => formatContent(props.name, current))
+    if (formatted !== current) {
+      view.dispatch({ changes: { from: 0, to: current.length, insert: formatted } })
+    }
+  } catch { /* surfaced via the inline status notification */ } finally {
+    formatting.value = false
+  }
+}
+
 defineExpose({ save })
 
 onMounted(load)
@@ -131,6 +151,20 @@ onBeforeUnmount(() => view?.destroy())
       [ERR] Failed to load file
     </div>
 
-    <div v-show="state === 'ready'" ref="editorEl" class="flex-1 overflow-auto min-h-0" />
+    <div v-show="state === 'ready'" class="relative flex-1 min-h-0">
+      <button
+        v-if="formatter"
+        type="button"
+        title="Format (Shift-Alt-F)"
+        class="absolute top-2 right-4 z-10 p-1.5 rounded-md bg-[var(--c-surface)] border border-[var(--c-border)] text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors shadow-sm disabled:opacity-50"
+        :disabled="formatting"
+        @click="format"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h7"/>
+        </svg>
+      </button>
+      <div ref="editorEl" class="h-full overflow-auto" />
+    </div>
   </div>
 </template>
