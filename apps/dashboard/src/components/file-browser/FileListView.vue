@@ -17,15 +17,6 @@ defineProps<{
   sortDir?: 'asc' | 'desc'
 }>()
 
-function uploadPct(t: Transfer) {
-  return (t.totalBytes ?? 0) > 0 ? Math.round((t.sentBytes ?? 0) / (t.totalBytes ?? 1) * 100) : 0
-}
-function uploadSpeed(bps: number) {
-  if (bps >= 1_048_576) return `${(bps / 1_048_576).toFixed(1)} MB/s`
-  if (bps >= 1_024)     return `${(bps / 1_024).toFixed(0)} KB/s`
-  return bps > 0 ? `${Math.round(bps)} B/s` : ''
-}
-
 const emit = defineEmits<{
   rowClick: [entry: Entry, event: MouseEvent]
   rowDblClick: [entry: Entry]
@@ -104,40 +95,27 @@ function fileExt(name: string): string {
       </tr>
     </thead>
     <tbody class="divide-y divide-[var(--c-border)]">
-      <!-- Upload rows -->
+      <!-- Upload rows (progress lives in the Transfers tray — this is a placeholder) -->
       <tr v-for="t in uploadTasks" :key="t.id" class="group">
         <td class="pl-3 pr-1 py-2.5 w-7" />
-        <td class="px-3 py-2">
-          <div class="flex flex-col gap-1.5 min-w-0">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <svg class="w-4 h-4 shrink-0"
-                :class="t.status === 'error' ? 'text-[var(--c-danger)]' : t.status === 'paused' ? 'text-[var(--c-warning)]' : 'text-[var(--c-text-3)]'"
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <span class="text-sm truncate select-none"
-                :class="t.status === 'error' ? 'text-[var(--c-danger)]' : 'text-[var(--c-text-2)]'">
-                {{ t.name }}
-              </span>
-              <span v-if="t.status === 'error'" class="text-[10px] text-[var(--c-danger)] shrink-0">{{ t.error }}</span>
-              <span v-else-if="t.status === 'paused'" class="text-[10px] text-[var(--c-warning)] shrink-0">Paused</span>
-            </div>
-            <!-- Progress bar -->
-            <div v-if="t.status === 'uploading' || t.status === 'paused'" class="ml-6 h-1 bg-[var(--c-border)] rounded-full overflow-hidden">
-              <div class="h-full rounded-full transition-all duration-300"
-                :class="t.status === 'paused' ? 'bg-[var(--c-warning)]' : 'bg-[var(--c-accent)]'"
-                :style="{ width: uploadPct(t) + '%' }" />
-            </div>
+        <td class="px-3 py-2.5" colspan="3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 shrink-0"
+              :class="t.status === 'error' ? 'text-[var(--c-danger)]' : t.status === 'paused' ? 'text-[var(--c-warning)]' : 'text-[var(--c-text-3)]'"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span class="text-sm truncate select-none"
+              :class="t.status === 'error' ? 'text-[var(--c-danger)]' : 'text-[var(--c-text-2)]'">
+              {{ t.name }}
+            </span>
+            <span v-if="t.status === 'error'" class="text-[10px] text-[var(--c-danger)] shrink-0">{{ t.error }}</span>
+            <span v-else-if="t.status === 'paused'" class="text-[10px] text-[var(--c-warning)] shrink-0">Paused</span>
+            <svg v-else-if="t.status === 'uploading'" class="w-3.5 h-3.5 text-[var(--c-text-3)] animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
           </div>
-        </td>
-        <td class="px-3 py-2 text-right text-[var(--c-text-3)] text-xs tabular-nums whitespace-nowrap">
-          <span v-if="t.status === 'uploading' && (t.bytesPerSec ?? 0) > 0">{{ uploadSpeed(t.bytesPerSec ?? 0) }}</span>
-          <span v-else-if="t.status === 'error'" class="text-[var(--c-danger)]">Error</span>
-        </td>
-        <td class="px-3 py-2 text-right text-xs tabular-nums whitespace-nowrap"
-          :class="t.status === 'error' ? 'text-[var(--c-danger)]' : 'text-[var(--c-text-3)]'">
-          <span v-if="t.status === 'uploading' || t.status === 'paused'">{{ uploadPct(t) }}%</span>
-          <span v-else-if="t.status === 'error'">Failed</span>
         </td>
       </tr>
 
