@@ -45,6 +45,7 @@ const renamingPath    = ref<string | null>(null)
 const renameValue     = ref('')
 const pendingPaths    = ref<string[]>([])
 const creatingFolder  = ref(false)
+const creatingFile    = ref(false)
 const permDialogPath  = ref<string | null>(null)
 const shareTarget     = ref<{ path: string; name: string } | null>(null)
 const propertiesEntry = ref<Entry | null>(null)
@@ -326,6 +327,20 @@ async function createFolder() {
   refresh()
 }
 
+async function createFile() {
+  if (!currentPath.value) return
+  creatingFile.value = true
+  try {
+    await track('Creating file', async () => {
+      const { jobId } = await trpc.fs.touch.mutate({ parentPath: currentPath.value!, name: 'New File' })
+      await pollJob(jobId)
+    })
+  } finally {
+    creatingFile.value = false
+  }
+  refresh()
+}
+
 function doCopy() {
   if (!selected.value.size) return
   clipCopy([...selected.value])
@@ -560,6 +575,7 @@ onMounted(async () => {
         @share="openShare"
         @delete="doDelete"
         @create-folder="createFolder"
+        @create-file="createFile"
         @upload-click="fileInput?.click()"
         @paste="doPaste"
         @refresh="refresh"
@@ -679,6 +695,7 @@ onMounted(async () => {
             :rename-value="renameValue"
             :pending-paths="pendingPaths"
             :creating-folder="creatingFolder"
+            :creating-file="creatingFile"
             :upload-tasks="activeUploads"
             @card-click="handleGridCardClick"
             @card-dbl-click="handleGridCardDblClick"
@@ -703,6 +720,7 @@ onMounted(async () => {
             :rename-value="renameValue"
             :pending-paths="pendingPaths"
             :creating-folder="creatingFolder"
+            :creating-file="creatingFile"
             :upload-tasks="activeUploads"
             @row-click="handleRowClick"
             @row-dbl-click="handleRowDblClick"
@@ -832,6 +850,12 @@ onMounted(async () => {
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
           </svg>
           New Folder
+        </button>
+        <button v-if="currentPath" @click="createFile(); closeContextMenu()" class="ctx-item">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          New File
         </button>
         <button v-if="currentPath" @click="fileInput?.click(); closeContextMenu()" class="ctx-item">
           <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

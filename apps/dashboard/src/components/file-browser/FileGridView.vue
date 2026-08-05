@@ -10,6 +10,7 @@ defineProps<{
   renameValue: string
   pendingPaths?: string[]
   creatingFolder?: boolean
+  creatingFile?: boolean
   uploadTasks?: Transfer[]
 }>()
 
@@ -93,6 +94,21 @@ function uploadSpeed(bps: number) {
         <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z"/>
       </svg>
       <span class="text-xs text-[var(--c-text-3)] italic">New Folder…</span>
+      <!-- Centered spinner overlay -->
+      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--c-bg)]/30">
+        <svg class="w-5 h-5 animate-spin text-[var(--c-accent)]" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Ghost card while creating a file -->
+    <div v-if="creatingFile" class="relative flex flex-col items-center gap-1.5 px-2 pt-3 pb-2.5 rounded-xl bg-[var(--c-hover)] opacity-60 select-none pointer-events-none">
+      <svg class="w-11 h-11 text-[var(--c-accent)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.25">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+      </svg>
+      <span class="text-xs text-[var(--c-text-3)] italic">New File…</span>
       <!-- Centered spinner overlay -->
       <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--c-bg)]/30">
         <svg class="w-5 h-5 animate-spin text-[var(--c-accent)]" fill="none" viewBox="0 0 24 24">
