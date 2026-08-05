@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.40.1] - 2026-08-05
+
 ### Security
 - Bumped `@fastify/static`, `postcss` and `fast-uri` to their patched versions, closing 5
   Dependabot advisories (3 high, 2 moderate: path-traversal/auth-bypass in `@fastify/static`,
@@ -618,7 +620,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.1...HEAD
+[1.40.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.0...v1.40.1
 [1.40.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.39.0...v1.40.0
 [1.39.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.38.0...v1.39.0
 [1.38.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.37.0...v1.38.0
