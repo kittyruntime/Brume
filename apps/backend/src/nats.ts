@@ -15,6 +15,7 @@ const TASK_STREAM = {
   name: "TASKS",
   subjects: [
     "root.fs.mkdir",
+    "root.fs.touch",
     "root.fs.copy",
     "root.fs.move",
     "root.fs.rename",

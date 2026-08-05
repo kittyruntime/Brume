@@ -82,6 +82,7 @@ function actionLabel(action: string): string {
     'auth.logout':               'Logout',
     'fs.delete':                 'Delete file',
     'fs.mkdir':                  'Create folder',
+    'fs.touch':                  'Create file',
     'fs.rename':                 'Rename',
     'fs.move':                   'Move',
     'fs.copy':                   'Copy',

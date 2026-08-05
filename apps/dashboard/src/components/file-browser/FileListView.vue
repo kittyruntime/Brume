@@ -111,7 +111,7 @@ function fileExt(name: string): string {
             </span>
             <span v-if="t.status === 'error'" class="text-[10px] text-[var(--c-danger)] shrink-0">{{ t.error }}</span>
             <span v-else-if="t.status === 'paused'" class="text-[10px] text-[var(--c-warning)] shrink-0">Paused</span>
-            <svg v-else-if="t.status === 'uploading'" class="w-3.5 h-3.5 text-[var(--c-text-3)] animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+            <svg v-else-if="t.status === 'uploading' || t.status === 'verifying' || t.status === 'queued' || t.status === 'running'" class="w-3.5 h-3.5 text-[var(--c-text-3)] animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
             </svg>

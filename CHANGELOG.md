@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **New file action**: the file browser can now create an empty file ("New file", next to "New
+  folder") from the toolbar or the right-click menu, the same way folders are created.
+
+### Fixed
+- **One progress bar per upload**: an upload's live progress (bar, percentage, speed) now shows
+  only in the Transfers tray — it no longer also duplicates as a second live progress bar
+  inline in the file list/grid.
+
 ## [1.40.1] - 2026-08-05
 
 ### Security
