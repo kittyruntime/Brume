@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bumped `@fastify/static`, `postcss` and `fast-uri` to their patched versions, closing 5
+  Dependabot advisories (3 high, 2 moderate: path-traversal/auth-bypass in `@fastify/static`,
+  source-map path traversal in `postcss`, host confusion in `fast-uri`). None were exploitable
+  in how this app actually uses them, but the fixes are drop-in.
+
 ## [1.40.0] - 2026-08-05
 
 ### Added
