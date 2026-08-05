@@ -122,6 +122,7 @@ func withUser(username string, fn func() error) error {
 var taskSubjects = []string{
 	// Filesystem operations
 	"root.fs.mkdir",
+	"root.fs.touch",
 	"root.fs.copy",
 	"root.fs.move",
 	"root.fs.rename",
@@ -656,6 +657,24 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 			var res *mkdirResult
 			err := withUser(task.LinuxUsername, func() error {
 				res, fsErr = doMkdir(task.ParentPath, task.Name)
+				if fsErr != nil {
+					return fsErr
+				}
+				return nil
+			})
+			if err != nil {
+				fsErr = toFsErr(err)
+			}
+			result = res
+		}
+
+	case "root.fs.touch":
+		// Same scoping rationale as root.fs.mkdir above.
+		fsErr = validatePathsScoped(task.AllowedRoot, task.ParentPath, filepath.Join(task.ParentPath, task.Name))
+		if fsErr == nil {
+			var res *touchResult
+			err := withUser(task.LinuxUsername, func() error {
+				res, fsErr = doTouch(task.ParentPath, task.Name)
 				if fsErr != nil {
 					return fsErr
 				}

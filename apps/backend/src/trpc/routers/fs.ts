@@ -292,6 +292,17 @@ export const fsRouter = router({
       return { jobId }
     }),
 
+  // ── touch (async) — create an empty file ──────────────────────────────────────
+  touch: protectedProcedure
+    .input(z.object({ parentPath: z.string(), name: z.string().min(1).max(255) }))
+    .mutation(async ({ ctx, input }) => {
+      const parent = normalize(input.parentPath)
+      const allowedRoot = await checkPathPerm(ctx, parent, "canWrite")
+      const linuxUser = await getLinuxUser(ctx)
+      const jobId = await publishJob("fs.touch", { linuxUsername: linuxUser ?? "", parentPath: parent, name: input.name, allowedRoot: allowedRoot ?? "" }, ctx.user.userId)
+      return { jobId }
+    }),
+
   // ── copy (async) ─────────────────────────────────────────────────────────────
   copy: protectedProcedure
     .input(z.object({ src: z.string(), dstDir: z.string() }))

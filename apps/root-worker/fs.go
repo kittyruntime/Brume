@@ -300,6 +300,30 @@ func doMkdir(parent, name string) (*mkdirResult, *fsError) {
 	return &mkdirResult{Path: target, Name: filepath.Base(target)}, nil
 }
 
+// ── touch ─────────────────────────────────────────────────────────────────────
+
+type touchResult struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+func doTouch(parent, name string) (*touchResult, *fsError) {
+	if name == "" {
+		name = "New File"
+	}
+	target := filepath.Join(parent, name)
+	for n := 1; n <= 1000; n++ {
+		if _, err := os.Lstat(target); os.IsNotExist(err) {
+			break
+		}
+		target = filepath.Join(parent, fmt.Sprintf("%s (%d)", name, n))
+	}
+	if err := os.WriteFile(target, []byte{}, 0664); err != nil {
+		return nil, mapOsErr(err)
+	}
+	return &touchResult{Path: target, Name: filepath.Base(target)}, nil
+}
+
 // ── copy ──────────────────────────────────────────────────────────────────────
 
 type copyResult struct {
