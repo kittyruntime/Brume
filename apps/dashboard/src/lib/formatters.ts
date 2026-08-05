@@ -77,10 +77,19 @@ export function getFormatter(filename: string): FormatterEntry | null {
 
 let standaloneMod: typeof import('prettier/standalone') | null = null
 
-export async function formatContent(filename: string, content: string): Promise<string> {
+export async function formatContent(
+  filename: string,
+  content: string,
+  cursorOffset = 0
+): Promise<{ formatted: string; cursorOffset: number }> {
   const entry = getFormatter(filename)
   if (!entry) throw new Error(`No formatter for ${filename}`)
   if (!standaloneMod) standaloneMod = await import('prettier/standalone')
   const plugins = await entry.loadPlugins()
-  return standaloneMod.format(content, { parser: entry.parser, plugins })
+  const result = await standaloneMod.formatWithCursor(content, {
+    parser: entry.parser,
+    plugins,
+    cursorOffset,
+  })
+  return { formatted: result.formatted, cursorOffset: result.cursorOffset }
 }

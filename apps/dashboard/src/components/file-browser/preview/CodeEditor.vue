@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, Compartment } from '@codemirror/state'
+import { EditorState, Compartment, EditorSelection } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands'
 import { LanguageDescription } from '@codemirror/language'
@@ -107,15 +107,24 @@ async function save() {
 
 async function format() {
   if (!view || formatting.value) return
-  const entry = getFormatter(props.name)
-  if (!entry) return
+  if (!formatter.value) return
   formatting.value = true
   try {
-    const current = view.state.doc.toString()
-    const formatted = await track(`Formatting ${props.name}`, () => formatContent(props.name, current))
-    if (formatted !== current) {
-      view.dispatch({ changes: { from: 0, to: current.length, insert: formatted } })
-    }
+    await track(`Formatting ${props.name}`, async () => {
+      const current = view!.state.doc.toString()
+      const cursorOffset = view!.state.selection.main.head
+      const { formatted, cursorOffset: newCursor } = await formatContent(props.name, current, cursorOffset)
+      if (view!.state.doc.toString() !== current) {
+        throw new Error('File changed while formatting — try again')
+      }
+      if (formatted !== current) {
+        const clamped = Math.min(Math.max(newCursor, 0), formatted.length)
+        view!.dispatch({
+          changes: { from: 0, to: current.length, insert: formatted },
+          selection: EditorSelection.cursor(clamped),
+        })
+      }
+    })
   } catch { /* surfaced via the inline status notification */ } finally {
     formatting.value = false
   }

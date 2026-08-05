@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Format action in the text editor**: JSON, YAML, CSS/SCSS/LESS, HTML, Markdown, JS and TS
+  files can now be reformatted in place from the file browser's text editor, via a toolbar
+  button or `Shift-Alt-F`. Uses Prettier, loaded lazily per file type so it costs nothing in
+  the main bundle until used.
+
 ## [1.39.0] - 2026-07-24
 
 ### Changed
