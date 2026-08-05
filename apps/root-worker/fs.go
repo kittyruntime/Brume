@@ -313,15 +313,17 @@ func doTouch(parent, name string) (*touchResult, *fsError) {
 	}
 	target := filepath.Join(parent, name)
 	for n := 1; n <= 1000; n++ {
-		if _, err := os.Lstat(target); os.IsNotExist(err) {
-			break
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0664)
+		if err == nil {
+			f.Close()
+			return &touchResult{Path: target, Name: filepath.Base(target)}, nil
+		}
+		if !os.IsExist(err) {
+			return nil, mapOsErr(err)
 		}
 		target = filepath.Join(parent, fmt.Sprintf("%s (%d)", name, n))
 	}
-	if err := os.WriteFile(target, []byte{}, 0664); err != nil {
-		return nil, mapOsErr(err)
-	}
-	return &touchResult{Path: target, Name: filepath.Base(target)}, nil
+	return nil, &fsError{Code: "EEXIST", Message: "could not find a unique name after 1000 attempts"}
 }
 
 // ── copy ──────────────────────────────────────────────────────────────────────
