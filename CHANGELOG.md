@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.40.0] - 2026-08-05
+
 ### Added
 - **Format action in the text editor**: JSON, YAML, CSS/SCSS/LESS, HTML, Markdown, JS and TS
   files can now be reformatted in place from the file browser's text editor, via a toolbar
@@ -610,7 +612,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.39.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.0...HEAD
+[1.40.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.39.0...v1.40.0
 [1.39.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.38.0...v1.39.0
 [1.38.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.37.0...v1.38.0
 [1.37.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.36.0...v1.37.0
