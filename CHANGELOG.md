@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-08-06
+
 ### Added
 - **New file action**: the file browser can now create an empty file ("New file", next to "New
   folder") from the toolbar or the right-click menu, the same way folders are created.
@@ -629,7 +631,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.1...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.41.0...HEAD
+[1.41.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.1...v1.41.0
 [1.40.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.0...v1.40.1
 [1.40.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.39.0...v1.40.0
 [1.39.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.38.0...v1.39.0
