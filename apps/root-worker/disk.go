@@ -270,6 +270,11 @@ func handleDiskFormat(nc *nats.Conn, msg *nats.Msg) {
 		}
 	}
 
+	if member, reason := isRaidOrLvmMember(req.Device); member {
+		replyErr(nc, msg.Reply, &fsError{Code: "EMEMBER", Message: reason + " — remove it from the array/volume group first"})
+		return
+	}
+
 	label := strings.TrimSpace(req.Label)
 	var args []string
 	switch req.FsType {
@@ -366,8 +371,10 @@ func handleDiskMount(nc *nats.Conn, msg *nats.Msg) {
 	if opts == "" {
 		opts = "defaults"
 	}
-	// Options are a single fstab field; a newline or tab would break the line.
-	if strings.ContainsAny(opts, "\n\r\t") {
+	// Reject fstab structural characters, same rationale as the mount point
+	// check above: newline/CR/tab would inject extra fstab lines; space and #
+	// break field parsing / start comments.
+	if strings.ContainsAny(opts, "\n\r\t #") {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "mount options contain invalid characters"})
 		return
 	}
@@ -664,6 +671,33 @@ func getLvmInfo() (pvs []lvmPV, vgs []lvmVG, lvs []lvmLV) {
 	return
 }
 
+// isRaidOrLvmMember reports whether device (bare name, e.g. "sdb1") is
+// currently a member of an assembled RAID array or an LVM physical volume,
+// even if it isn't mounted. Used to block destructive operations (format,
+// partition delete/init) that would silently corrupt the array/VG.
+func isRaidOrLvmMember(device string) (bool, string) {
+	if mdata, err := os.ReadFile("/proc/mdstat"); err == nil {
+		for _, r := range parseMdstat(string(mdata)) {
+			for _, d := range r.Devices {
+				if d == device {
+					return true, "device is a member of RAID array " + r.Name
+				}
+			}
+		}
+	}
+	devPath := "/dev/" + device
+	pvs, _, _ := getLvmInfo()
+	for _, pv := range pvs {
+		if pv.Name == devPath {
+			if pv.VGName != "" {
+				return true, "device is an LVM physical volume in volume group " + pv.VGName
+			}
+			return true, "device is an LVM physical volume"
+		}
+	}
+	return false, ""
+}
+
 func handleLvmInfo(nc *nats.Conn, msg *nats.Msg) {
 	pvs, vgs, lvs := getLvmInfo()
 	replyOk(nc, msg.Reply, map[string]any{"pvs": pvs, "vgs": vgs, "lvs": lvs})
@@ -811,6 +845,22 @@ func handleVgRemove(nc *nats.Conn, msg *nats.Msg) {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "invalid VG name"})
 		return
 	}
+
+	_, _, lvs := getLvmInfo()
+	mdata, _ := os.ReadFile("/proc/mounts")
+	mounted := map[string]bool{}
+	for _, line := range strings.Split(string(mdata), "\n") {
+		if f := strings.Fields(line); len(f) > 0 {
+			mounted[f[0]] = true
+		}
+	}
+	for _, lv := range lvs {
+		if lv.VGName == req.VGName && mounted[lv.Path] {
+			replyErr(nc, msg.Reply, &fsError{Code: "EMNT", Message: "logical volume " + lv.Name + " is mounted — unmount it first"})
+			return
+		}
+	}
+
 	out, err := exec.Command("vgremove", "-f", req.VGName).CombinedOutput()
 	if err != nil {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: strings.TrimSpace(string(out))})
@@ -838,6 +888,10 @@ func handlePartitionInit(nc *nats.Conn, msg *nats.Msg) {
 	}
 	if systemDeviceNames()[req.Device] {
 		replyErr(nc, msg.Reply, &fsError{Code: "ESYS", Message: "cannot modify system disk"})
+		return
+	}
+	if member, reason := isRaidOrLvmMember(req.Device); member {
+		replyErr(nc, msg.Reply, &fsError{Code: "EMEMBER", Message: reason + " — remove it from the array/volume group first"})
 		return
 	}
 	devPath := "/dev/" + req.Device
@@ -1097,6 +1151,10 @@ func handlePartitionDelete(nc *nats.Conn, msg *nats.Msg) {
 	}
 	if systemDeviceNames()[req.Device] || systemDeviceNames()[partDev] {
 		replyErr(nc, msg.Reply, &fsError{Code: "ESYS", Message: "cannot delete partition from system disk"})
+		return
+	}
+	if member, reason := isRaidOrLvmMember(partDev); member {
+		replyErr(nc, msg.Reply, &fsError{Code: "EMEMBER", Message: reason + " — remove it from the array/volume group first"})
 		return
 	}
 	devPath := "/dev/" + partDev
