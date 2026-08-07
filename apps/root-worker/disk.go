@@ -671,28 +671,30 @@ func getLvmInfo() (pvs []lvmPV, vgs []lvmVG, lvs []lvmLV) {
 	return
 }
 
-// isRaidOrLvmMember reports whether device (bare name, e.g. "sdb1") is
-// currently a member of an assembled RAID array or an LVM physical volume,
-// even if it isn't mounted. Used to block destructive operations (format,
-// partition delete/init) that would silently corrupt the array/VG.
+// isRaidOrLvmMember reports whether device (bare name, e.g. "sdb1") or any of
+// its child partitions is currently a RAID member or LVM physical volume —
+// even if the array isn't assembled, the VG isn't visible to `pvs` (e.g. an
+// LVM devices-file exclusion), or the member is a partition of the disk
+// being checked rather than the disk itself. Used to block destructive
+// operations (format, partition delete/init) that would silently corrupt
+// the array/VG. Fails closed: if lsblk itself can't be queried, the device
+// is treated as a member (block, don't guess) — an unverifiable claim on a
+// path this destructive is treated as "assume dangerous".
 func isRaidOrLvmMember(device string) (bool, string) {
-	if mdata, err := os.ReadFile("/proc/mdstat"); err == nil {
-		for _, r := range parseMdstat(string(mdata)) {
-			for _, d := range r.Devices {
-				if d == device {
-					return true, "device is a member of RAID array " + r.Name
-				}
-			}
-		}
+	out, err := exec.Command("lsblk", "-rno", "NAME,FSTYPE", "/dev/"+device).Output()
+	if err != nil {
+		return true, "could not verify device usage — refusing to proceed"
 	}
-	devPath := "/dev/" + device
-	pvs, _, _ := getLvmInfo()
-	for _, pv := range pvs {
-		if pv.Name == devPath {
-			if pv.VGName != "" {
-				return true, "device is an LVM physical volume in volume group " + pv.VGName
-			}
-			return true, "device is an LVM physical volume"
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[1] {
+		case "linux_raid_member":
+			return true, "device " + fields[0] + " is a member of a RAID array"
+		case "LVM2_member":
+			return true, "device " + fields[0] + " is an LVM physical volume"
 		}
 	}
 	return false, ""
@@ -804,6 +806,16 @@ func handleLvCreate(nc *nats.Conn, msg *nats.Msg) {
 	replyOk(nc, msg.Reply, map[string]any{"ok": true})
 }
 
+// lvDmPath returns the /dev/mapper path the kernel actually reports in
+// /proc/mounts for an LV — mount(2) canonicalizes through devicemapper, so
+// /dev/<vg>/<lv> (what lvcreate/lvs report) never appears there; only
+// /dev/mapper/<vg>-<lv> does, with any literal "-" in the vg/lv name doubled.
+// Mirrors the frontend's lvToDmName (useStorageData.ts).
+func lvDmPath(vgName, lvName string) string {
+	esc := func(s string) string { return strings.ReplaceAll(s, "-", "--") }
+	return "/dev/mapper/" + esc(vgName) + "-" + esc(lvName)
+}
+
 func handleLvRemove(nc *nats.Conn, msg *nats.Msg) {
 	var req struct {
 		VGName string `json:"vgName"`
@@ -818,9 +830,10 @@ func handleLvRemove(nc *nats.Conn, msg *nats.Msg) {
 		return
 	}
 	lvPath := "/dev/" + req.VGName + "/" + req.LVName
+	dmPath := lvDmPath(req.VGName, req.LVName)
 	mdata, _ := os.ReadFile("/proc/mounts")
 	for _, line := range strings.Split(string(mdata), "\n") {
-		if f := strings.Fields(line); len(f) > 0 && f[0] == lvPath {
+		if f := strings.Fields(line); len(f) > 0 && (f[0] == lvPath || f[0] == dmPath) {
 			replyErr(nc, msg.Reply, &fsError{Code: "EMNT", Message: "LV is mounted — unmount it first"})
 			return
 		}
@@ -855,7 +868,10 @@ func handleVgRemove(nc *nats.Conn, msg *nats.Msg) {
 		}
 	}
 	for _, lv := range lvs {
-		if lv.VGName == req.VGName && mounted[lv.Path] {
+		if lv.VGName != req.VGName {
+			continue
+		}
+		if mounted[lv.Path] || mounted[lvDmPath(lv.VGName, lv.Name)] {
 			replyErr(nc, msg.Reply, &fsError{Code: "EMNT", Message: "logical volume " + lv.Name + " is mounted — unmount it first"})
 			return
 		}

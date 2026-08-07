@@ -958,10 +958,25 @@ func parseMdstat(content string) []raidArray {
 
 		name := fields[0]
 		state := fields[2]
-		level := fields[3]
+
+		// Some states carry an optional parenthetical annotation right after
+		// them, e.g. "active (read-only)" / "active (auto-read-only)" — skip
+		// it before looking for the level token.
+		idx := 3
+		if idx < len(fields) && strings.HasPrefix(fields[idx], "(") && strings.HasSuffix(fields[idx], ")") {
+			idx++
+		}
+
+		devStart := idx + 1
+		level := ""
+		if idx < len(fields) && !strings.Contains(fields[idx], "[") {
+			level = fields[idx]
+		} else {
+			devStart = idx
+		}
 
 		var devs []string
-		for _, f := range fields[4:] {
+		for _, f := range fields[devStart:] {
 			if idx := strings.Index(f, "["); idx > 0 {
 				devs = append(devs, f[:idx])
 			}
