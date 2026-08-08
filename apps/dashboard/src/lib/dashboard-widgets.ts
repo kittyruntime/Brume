@@ -172,13 +172,20 @@ export function useDashboardWidgets() {
   function hasType(t: WidgetType) { return widgets.value.some(w => w.type === t) }
 
   function syncTimers() {
-    const canStorage = isAdmin.value || hasCapability('storage').value
-    const wantSlow  = (isAdmin.value && hasType('sysinfo')) || (canStorage && hasType('storage'))
-    const wantSmart = canStorage && hasType('smart')
+    const canStorage  = isAdmin.value || hasCapability('storage').value
+    const wantSysinfo = isAdmin.value && hasType('sysinfo')
+    const wantStorage = canStorage && hasType('storage')
+    const wantSlow     = wantSysinfo || wantStorage
+    const wantSmart    = canStorage && hasType('smart')
+
+    function fetchSlow() {
+      if (wantSysinfo) fetchSysinfo()
+      if (wantStorage) fetchDisks()
+    }
 
     if (wantSlow && !slowTimer) {
-      fetchDisks(); fetchSysinfo()
-      slowTimer = setInterval(() => { fetchDisks(); fetchSysinfo() }, 30_000)
+      fetchSlow()
+      slowTimer = setInterval(fetchSlow, 30_000)
     } else if (!wantSlow && slowTimer) {
       clearInterval(slowTimer); slowTimer = null
     }
