@@ -171,17 +171,19 @@ export function useDashboardWidgets() {
 
   function hasType(t: WidgetType) { return widgets.value.some(w => w.type === t) }
 
-  function syncTimers() {
-    const canStorage  = isAdmin.value || hasCapability('storage').value
-    const wantSysinfo = isAdmin.value && hasType('sysinfo')
-    const wantStorage = canStorage && hasType('storage')
-    const wantSlow     = wantSysinfo || wantStorage
-    const wantSmart    = canStorage && hasType('smart')
+  function canStorage() { return isAdmin.value || hasCapability('storage').value }
 
-    function fetchSlow() {
-      if (wantSysinfo) fetchSysinfo()
-      if (wantStorage) fetchDisks()
-    }
+  // Reads live state on every call (not captured in a closure at timer-creation time) so
+  // toggling which slow widget is present while the timer is already running never leaves a
+  // stale gate — see commit 08d5cc8's follow-up fix for the bug this replaced.
+  function fetchSlow() {
+    if (isAdmin.value && hasType('sysinfo')) fetchSysinfo()
+    if (canStorage() && hasType('storage')) fetchDisks()
+  }
+
+  function syncTimers() {
+    const wantSlow  = (isAdmin.value && hasType('sysinfo')) || (canStorage() && hasType('storage'))
+    const wantSmart = canStorage() && hasType('smart')
 
     if (wantSlow && !slowTimer) {
       fetchSlow()
