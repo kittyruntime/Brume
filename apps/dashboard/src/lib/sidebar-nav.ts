@@ -5,16 +5,17 @@ import { ref, computed } from 'vue'
 // `isActive(id)`. The custom order is persisted per-browser in localStorage,
 // alongside theme/accent/desktop-mode (see lib/desktop.ts / lib/theme.ts).
 export interface NavItem {
-  id:         string
-  label:      string
-  adminOnly?: boolean
+  id:          string
+  label:       string
+  adminOnly?:  boolean
+  capability?: string
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Overview' },
   { id: 'files',     label: 'Files' },
   { id: 'apps',      label: 'Apps' },
-  { id: 'storage',   label: 'Storage',   adminOnly: true },
+  { id: 'storage',   label: 'Storage',   adminOnly: true, capability: 'storage' },
   { id: 'store',     label: 'App Store', adminOnly: true },
   { id: 'monitor',   label: 'Monitor',   adminOnly: true },
   { id: 'sharing',   label: 'Sharing',   adminOnly: true },
@@ -75,11 +76,11 @@ export function resetOrder() {
 }
 
 /** The visible, ordered nav items for the given admin state. */
-export function useSidebarNav(isAdmin: () => boolean) {
+export function useSidebarNav(isAdmin: () => boolean, hasCapability: (cap: string) => boolean) {
   const items = computed<NavItem[]>(() =>
     orderedIds.value
       .map(id => BY_ID.get(id)!)
-      .filter(it => !it.adminOnly || isAdmin()),
+      .filter(it => !it.adminOnly || isAdmin() || (it.capability != null && hasCapability(it.capability))),
   )
   return { items }
 }

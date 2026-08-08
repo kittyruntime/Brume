@@ -24,6 +24,15 @@ export function useAuth() {
     token.value ? (parseJwt(token.value).userId as string | null) ?? null : null
   )
 
+  function hasCapability(capability: string) {
+    return computed(() => {
+      if (!token.value) return false
+      const p = parseJwt(token.value)
+      if (p.isAdmin === true) return true
+      return Array.isArray(p.capabilities) && p.capabilities.includes(capability)
+    })
+  }
+
   async function login(username: string, password: string) {
     const res = await trpc.auth.login.mutate({ username, password })
     token.value = res.token
@@ -46,6 +55,7 @@ export function useAuth() {
     isAuthenticated,
     isAdmin,
     isUserManager,
+    hasCapability,
     login,
     logout,
   }

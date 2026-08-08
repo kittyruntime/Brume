@@ -27,7 +27,7 @@ import Launchpad from '../components/desktop/Launchpad.vue'
 import DesktopShell from '../components/desktop/DesktopShell.vue'
 
 const router = useRouter()
-const { currentUsername, isAdmin, logout } = useAuth()
+const { currentUsername, isAdmin, hasCapability, logout } = useAuth()
 const { notifications } = useNotifications()
 const { desktopMode, setDesktopMode, openApp } = useDesktop()
 
@@ -96,7 +96,7 @@ function selectApp(id: string) {
 }
 
 // Data-driven, user-orderable sidebar / mobile nav (order persisted per-browser).
-const { items: navItems } = useSidebarNav(() => isAdmin.value)
+const { items: navItems } = useSidebarNav(() => isAdmin.value, cap => hasCapability(cap).value)
 
 // Native drag-and-drop reorder (desktop sidebar only). Operates on the full
 // ordered id list so hidden admin items keep their relative position.
