@@ -17,6 +17,7 @@ type User = {
   isAdmin: boolean
   isUserManager: boolean
   createdAt: Date | string
+  capabilities: { capability: string }[]
 }
 type Group = { id: string; name: string; members: { userId: string }[] }
 

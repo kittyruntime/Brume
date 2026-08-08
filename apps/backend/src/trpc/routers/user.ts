@@ -1,7 +1,7 @@
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { TRPCError } from "@trpc/server"
-import { router, protectedProcedure, userManagerProcedure } from "../index"
+import { router, protectedProcedure, userManagerProcedure, adminProcedure, CAPABILITIES } from "../index"
 import { userSelect, createUser, changePassword, DEFAULT_PASSWORD, reLinuxUsername } from "../../services/user.service"
 import { syncSharesBestEffort } from "../../services/sharing.service"
 
@@ -148,5 +148,30 @@ export const userRouter = router({
       const result = await ctx.prisma.user.delete({ where: { id: input.userId } })
       void syncSharesBestEffort(ctx.prisma)
       return result
+    }),
+
+  setCapability: adminProcedure
+    .input(z.object({
+      userId: z.string(),
+      capability: z.enum(CAPABILITIES),
+      granted: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      })
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" })
+      if (input.granted) {
+        await ctx.prisma.userCapability.upsert({
+          where: { userId_capability: { userId: input.userId, capability: input.capability } },
+          create: { userId: input.userId, capability: input.capability },
+          update: {},
+        })
+      } else {
+        await ctx.prisma.userCapability.deleteMany({
+          where: { userId: input.userId, capability: input.capability },
+        })
+      }
     }),
 })

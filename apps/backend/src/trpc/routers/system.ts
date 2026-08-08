@@ -1,7 +1,7 @@
 import * as os from "os"
 import * as fs from "fs"
 import { z } from "zod"
-import { router, protectedProcedure, adminProcedure } from "../index"
+import { router, protectedProcedure, adminProcedure, storageProcedure } from "../index"
 import { requestSync } from "../../nats"
 
 // --- CPU delta ---
@@ -159,21 +159,21 @@ export const systemRouter = router({
 
   sysinfo: adminProcedure.query(() => sysinfoSnapshot()),
 
-  disks: adminProcedure.query(async () => {
+  disks: storageProcedure.query(async () => {
     return await requestSync<{
       disks: Array<{ device: string; mountPoint: string; fsType: string; total: number; used: number; free: number }>
       raids: Array<{ name: string; level: string; state: string; devices: string[]; active: number; total: number }>
     }>("root.sys.disks", {})
   }),
 
-  blockDevices: adminProcedure.query(async () => {
+  blockDevices: storageProcedure.query(async () => {
     return await requestSync<{
       devices: unknown[]
       raids: Array<{ name: string; level: string; state: string; devices: string[]; active: number; total: number }>
     }>("root.sys.blockdevices", {}, 15_000)
   }),
 
-  formatDisk: adminProcedure
+  formatDisk: storageProcedure
     .input(z.object({
       // Bare name (sda1, md0) or relative LVM path (ubuntu-vg/ubuntu-lv)
       device: z.string().regex(/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?$/),
@@ -184,7 +184,7 @@ export const systemRouter = router({
       return await requestSync("root.sys.format", input, 120_000)
     }),
 
-  mountDevice: adminProcedure
+  mountDevice: storageProcedure
     .input(z.object({
       device:     z.string().regex(/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?$/),
       // Disallow whitespace and # to prevent fstab field injection
@@ -196,7 +196,7 @@ export const systemRouter = router({
       return await requestSync("root.sys.mount", input, 20_000)
     }),
 
-  umountDevice: adminProcedure
+  umountDevice: storageProcedure
     .input(z.object({
       mountpoint:      z.string().min(2),
       removeFromFstab: z.boolean().default(false),
@@ -205,7 +205,7 @@ export const systemRouter = router({
       return await requestSync("root.sys.umount", input, 20_000)
     }),
 
-  createRaid: adminProcedure
+  createRaid: storageProcedure
     .input(z.object({
       name:    z.string().regex(/^md[0-9]{1,3}$/),
       level:   z.number().int().refine(n => [0, 1, 5, 10].includes(n), { message: 'Invalid RAID level' }),
@@ -215,7 +215,7 @@ export const systemRouter = router({
       return await requestSync("root.sys.raid.create", input, 120_000)
     }),
 
-  stopRaid: adminProcedure
+  stopRaid: storageProcedure
     .input(z.object({
       name: z.string().regex(/^md[0-9]{1,3}$/),
     }))
@@ -223,7 +223,7 @@ export const systemRouter = router({
       return await requestSync("root.sys.raid.stop", input, 30_000)
     }),
 
-  smartInfo: adminProcedure
+  smartInfo: storageProcedure
     .input(z.object({
       device: z.string().regex(/^[a-z][a-z0-9]+$/), // bare name only: sda, nvme0n1
     }))
@@ -233,7 +233,7 @@ export const systemRouter = router({
 
   // ── LVM ────────────────────────────────────────────────────────────────────
 
-  lvmInfo: adminProcedure.query(async () => {
+  lvmInfo: storageProcedure.query(async () => {
     return await requestSync<{
       pvs: Array<{ name: string; vgName: string; size: number; free: number }>
       vgs: Array<{ name: string; size: number; free: number; pvCount: number; lvCount: number }>
@@ -241,18 +241,18 @@ export const systemRouter = router({
     }>("root.sys.lvm.info", {}, 10_000)
   }),
 
-  createPv: adminProcedure
+  createPv: storageProcedure
     .input(z.object({ devices: z.array(z.string().regex(/^[a-z][a-z0-9]+$/)).min(1) }))
     .mutation(async ({ input }) => requestSync("root.sys.lvm.pv.create", input, 30_000)),
 
-  createVg: adminProcedure
+  createVg: storageProcedure
     .input(z.object({
       name:    z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/),
       devices: z.array(z.string().regex(/^[a-z][a-z0-9]+$/)).min(1),
     }))
     .mutation(async ({ input }) => requestSync("root.sys.lvm.vg.create", input, 30_000)),
 
-  createLv: adminProcedure
+  createLv: storageProcedure
     .input(z.object({
       vgName:    z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/),
       lvName:    z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/),
@@ -260,24 +260,24 @@ export const systemRouter = router({
     }))
     .mutation(async ({ input }) => requestSync("root.sys.lvm.lv.create", input, 30_000)),
 
-  removeLv: adminProcedure
+  removeLv: storageProcedure
     .input(z.object({
       vgName: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/),
       lvName: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/),
     }))
     .mutation(async ({ input }) => requestSync("root.sys.lvm.lv.remove", input, 20_000)),
 
-  removeVg: adminProcedure
+  removeVg: storageProcedure
     .input(z.object({ vgName: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,30}$/) }))
     .mutation(async ({ input }) => requestSync("root.sys.lvm.vg.remove", input, 20_000)),
 
   // ── Partitions ─────────────────────────────────────────────────────────────
 
-  initPartitionTable: adminProcedure
+  initPartitionTable: storageProcedure
     .input(z.object({ device: z.string().regex(/^[a-z][a-z0-9]+$/) }))
     .mutation(async ({ input }) => requestSync("root.sys.part.init", input, 15_000)),
 
-  createPartition: adminProcedure
+  createPartition: storageProcedure
     .input(z.object({
       device:   z.string().regex(/^[a-z][a-z0-9]+$/),
       startPct: z.number().int().min(0).max(99).default(0),
@@ -285,7 +285,7 @@ export const systemRouter = router({
     }))
     .mutation(async ({ input }) => requestSync("root.sys.part.create", input, 15_000)),
 
-  deletePartition: adminProcedure
+  deletePartition: storageProcedure
     .input(z.object({
       device:  z.string().regex(/^[a-z][a-z0-9]+$/),
       partNum: z.string().regex(/^[1-9][0-9]?$/),

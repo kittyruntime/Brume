@@ -13,4 +13,15 @@ model User {
   placePermissions UserPlacePermission[]
   auditLogs        AuditLog[]
   shareLinks       ShareLink[] @relation("UserShareLinks")
+  capabilities     UserCapability[]
+}
+
+model UserCapability {
+  id         String   @id @default(uuid())
+  userId     String
+  capability String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, capability])
 }

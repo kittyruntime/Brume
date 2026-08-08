@@ -25,12 +25,13 @@ export interface TokenPayload {
   userId: string
   isAdmin: boolean
   isUserManager: boolean
+  capabilities: string[]
   jti: string
 }
 
-export function signToken(userId: string, isAdmin: boolean, isUserManager: boolean): string {
+export function signToken(userId: string, isAdmin: boolean, isUserManager: boolean, capabilities: string[]): string {
   const jti = crypto.randomUUID()
-  return jwt.sign({ userId, isAdmin, isUserManager, jti }, JWT_SECRET, { expiresIn: "7d" })
+  return jwt.sign({ userId, isAdmin, isUserManager, capabilities, jti }, JWT_SECRET, { expiresIn: "7d" })
 }
 
 export function verifyToken(token: string): TokenPayload {

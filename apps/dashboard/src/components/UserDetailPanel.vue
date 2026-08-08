@@ -10,6 +10,7 @@ type User = {
   isAdmin: boolean
   isUserManager: boolean
   createdAt: Date | string
+  capabilities: { capability: string }[]
 }
 type Group = { id: string; name: string; members: { userId: string }[] }
 
@@ -25,6 +26,9 @@ const saveSuccess = ref(false)
 
 const accountBusy  = ref<Record<'isAdmin' | 'isUserManager', boolean>>({ isAdmin: false, isUserManager: false })
 const accountError = ref('')
+
+const capabilityBusy  = ref<Record<'storage', boolean>>({ storage: false })
+const capabilityError = ref('')
 
 const deleteBusy    = ref(false)
 const deleteConfirm = ref(false)
@@ -82,6 +86,31 @@ async function toggleAccountFlag(flag: 'isAdmin' | 'isUserManager') {
     accountError.value = e?.message ?? 'Failed to update'
   } finally {
     accountBusy.value[flag] = false
+  }
+}
+
+// Named distinctly from useAuth()'s hasCapability (not imported in this file) —
+// that one checks the viewing session's own JWT claims; this one checks the
+// capabilities of the `user` prop being edited, read from userSelect's output.
+function userHasCapability(capability: 'storage'): boolean {
+  return props.user.capabilities.some(c => c.capability === capability)
+}
+
+async function toggleCapability(capability: 'storage') {
+  if (isSelf.value || capabilityBusy.value[capability]) return
+  capabilityBusy.value[capability] = true
+  capabilityError.value = ''
+  try {
+    await trpc.user.setCapability.mutate({
+      userId: props.user.id,
+      capability,
+      granted: !userHasCapability(capability),
+    })
+    emit('reload')
+  } catch (e: any) {
+    capabilityError.value = e?.message ?? 'Failed to update'
+  } finally {
+    capabilityBusy.value[capability] = false
   }
 }
 
@@ -199,10 +228,25 @@ async function deleteUser() {
             class="shrink-0"
           />
         </label>
+        <label class="flex items-center justify-between gap-4 px-4 py-3 cursor-pointer" :class="{ 'opacity-50 cursor-not-allowed': isSelf }">
+          <div>
+            <p class="text-sm text-[var(--c-text-1)]">Storage admin</p>
+            <p class="text-xs text-[var(--c-text-3)] mt-0.5">Can manage disks, RAID, LVM, and partitions.</p>
+          </div>
+          <input
+            type="checkbox"
+            :checked="userHasCapability('storage')"
+            :disabled="isSelf || capabilityBusy.storage"
+            @change="toggleCapability('storage')"
+            class="shrink-0"
+          />
+        </label>
       </div>
 
+      <p class="text-xs text-[var(--c-text-3)] px-0.5">Access changes apply immediately, but menus update after the account's next sign-in.</p>
       <p v-if="isSelf" class="text-xs text-[var(--c-text-3)] px-0.5">You can't change your own access.</p>
       <p v-if="accountError" class="text-[var(--c-danger)] text-xs px-0.5">{{ accountError }}</p>
+      <p v-if="capabilityError" class="text-[var(--c-danger)] text-xs px-0.5">{{ capabilityError }}</p>
     </div>
 
     <!-- ── Groups (read-only) ───────────────────────────────────────────────── -->

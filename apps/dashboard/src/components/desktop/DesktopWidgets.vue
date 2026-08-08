@@ -19,9 +19,9 @@ const {
   toggleCols, removeWidget, addWidget,
 } = useDashboardWidgets()
 
-const { isAdmin } = useAuth()
+const { isAdmin, hasCapability } = useAuth()
 const addableTypes = computed(() =>
-  catalogFor(isAdmin.value).filter(cat => !widgets.value.some(w => w.type === cat.type))
+  catalogFor(isAdmin.value, cap => hasCapability(cap).value).filter(cat => !widgets.value.some(w => w.type === cat.type))
 )
 
 const SMART_DOT: Record<string, string> = {

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Storage admin capability**: admins can now grant a non-admin account access to disk/RAID/
+  LVM/partition management (a new "Storage admin" toggle on the user's account panel) without
+  making them a full administrator. Revoking it takes effect on the account's very next request.
+
 ## [1.41.0] - 2026-08-06
 
 ### Added

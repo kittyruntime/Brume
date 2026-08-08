@@ -19,22 +19,24 @@ type ContainerStatus = { status: string }
 export type DiskFs  = { device: string; mountPoint: string; fsType: string; total: number; used: number; free: number }
 export type Sysinfo = { hostname: string; platform: string; arch: string; release: string; cpuModel: string; cpuCount: number; loadavg: [number, number, number] }
 
-type CatalogEntry = { type: WidgetType; label: string; adminOnly?: boolean }
+type CatalogEntry = { type: WidgetType; label: string; adminOnly?: boolean; capability?: string }
 
 const CATALOG_ALL: CatalogEntry[] = [
   { type: 'cpu',        label: 'CPU'         },
   { type: 'memory',     label: 'Memory'      },
   { type: 'network',    label: 'Network'     },
   { type: 'containers', label: 'Containers', adminOnly: true },
-  { type: 'storage',    label: 'Storage',    adminOnly: true },
+  { type: 'storage',    label: 'Storage',    adminOnly: true, capability: 'storage' },
   { type: 'sysinfo',    label: 'System',     adminOnly: true },
-  { type: 'smart',      label: 'Disk Health', adminOnly: true },
+  { type: 'smart',      label: 'Disk Health', adminOnly: true, capability: 'storage' },
 ]
 
 /** Widget types selectable given the viewer's role. Admin-only widgets rely on
  *  admin tRPC queries, so they are hidden from non-admins entirely. */
-export function catalogFor(isAdmin: boolean): { type: WidgetType; label: string }[] {
-  return CATALOG_ALL.filter(c => isAdmin || !c.adminOnly).map(({ type, label }) => ({ type, label }))
+export function catalogFor(isAdmin: boolean, hasCapability: (cap: string) => boolean): { type: WidgetType; label: string }[] {
+  return CATALOG_ALL
+    .filter(c => !c.adminOnly || isAdmin || (c.capability != null && hasCapability(c.capability)))
+    .map(({ type, label }) => ({ type, label }))
 }
 
 const SK = 'dashboard'
@@ -113,7 +115,7 @@ export function diskColor(percent: number): string {
 }
 
 export function useDashboardWidgets() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, hasCapability } = useAuth()
 
   const widgets    = ref<Widget[]>(loadWidgets(isAdmin.value))
   const metrics    = ref<Metrics | null>(null)
@@ -169,13 +171,24 @@ export function useDashboardWidgets() {
 
   function hasType(t: WidgetType) { return widgets.value.some(w => w.type === t) }
 
+  const storageCapability = hasCapability('storage')
+  function canStorage() { return isAdmin.value || storageCapability.value }
+
+  // Reads live state on every call (not captured in a closure at timer-creation time) so
+  // toggling which slow widget is present while the timer is already running never leaves a
+  // stale gate — see commit 08d5cc8's follow-up fix for the bug this replaced.
+  function fetchSlow() {
+    if (isAdmin.value && hasType('sysinfo')) fetchSysinfo()
+    if (canStorage() && hasType('storage')) fetchDisks()
+  }
+
   function syncTimers() {
-    const wantSlow  = isAdmin.value && (hasType('storage') || hasType('sysinfo'))
-    const wantSmart = isAdmin.value && hasType('smart')
+    const wantSlow  = (isAdmin.value && hasType('sysinfo')) || (canStorage() && hasType('storage'))
+    const wantSmart = canStorage() && hasType('smart')
 
     if (wantSlow && !slowTimer) {
-      fetchDisks(); fetchSysinfo()
-      slowTimer = setInterval(() => { fetchDisks(); fetchSysinfo() }, 30_000)
+      fetchSlow()
+      slowTimer = setInterval(fetchSlow, 30_000)
     } else if (!wantSlow && slowTimer) {
       clearInterval(slowTimer); slowTimer = null
     }

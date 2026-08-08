@@ -27,6 +27,18 @@ const isUserManager = t.middleware(({ ctx, next }) => {
   return next()
 })
 
+export const CAPABILITIES = ["storage"] as const
+export type Capability = (typeof CAPABILITIES)[number]
+
+function hasCapability(capability: Capability) {
+  return t.middleware(({ ctx, next }) => {
+    if (!ctx.user?.isAdmin && !ctx.user?.capabilities?.includes(capability)) {
+      throw new TRPCError({ code: "FORBIDDEN" })
+    }
+    return next()
+  })
+}
+
 // ── Audit logging ────────────────────────────────────────────────────────────
 
 function extractTarget(input: unknown): string | undefined {
@@ -83,3 +95,4 @@ const auditLog = t.middleware(async (opts) => {
 export const protectedProcedure   = t.procedure.use(isAuthed).use(auditLog)
 export const adminProcedure       = t.procedure.use(isAuthed).use(isAdmin).use(auditLog)
 export const userManagerProcedure = t.procedure.use(isAuthed).use(isUserManager).use(auditLog)
+export const storageProcedure = t.procedure.use(isAuthed).use(hasCapability("storage")).use(auditLog)

@@ -7,15 +7,15 @@ import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{ close: [] }>()
 const { openApp } = useDesktop()
-const { isAdmin } = useAuth()
+const { isAdmin, hasCapability } = useAuth()
 
 const visible = ref(true)
 function requestClose() { visible.value = false }
 
-const allApps: { id: AppId; adminOnly: boolean }[] = [
+const allApps: { id: AppId; adminOnly: boolean; capability?: string }[] = [
   { id: 'files',   adminOnly: false },
   { id: 'apps',    adminOnly: false },
-  { id: 'storage', adminOnly: true },
+  { id: 'storage', adminOnly: true, capability: 'storage' },
   { id: 'store',   adminOnly: true },
   { id: 'monitor', adminOnly: true },
   { id: 'sharing', adminOnly: true },
@@ -23,7 +23,9 @@ const allApps: { id: AppId; adminOnly: boolean }[] = [
 ]
 
 const visibleApps = computed(() =>
-  allApps.filter(a => !a.adminOnly || isAdmin.value).map(a => a.id)
+  allApps
+    .filter(a => !a.adminOnly || isAdmin.value || (a.capability != null && hasCapability(a.capability).value))
+    .map(a => a.id)
 )
 
 function launch(id: AppId) {

@@ -15,8 +15,8 @@ const {
   toggleCols, removeWidget, addWidget,
 } = useDashboardWidgets()
 
-const { isAdmin } = useAuth()
-const catalog = computed(() => catalogFor(isAdmin.value))
+const { isAdmin, hasCapability } = useAuth()
+const catalog = computed(() => catalogFor(isAdmin.value, cap => hasCapability(cap).value))
 
 const SMART_DOT: Record<string, string> = {
   passed:  'bg-[var(--c-success)]',
