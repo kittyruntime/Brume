@@ -16,6 +16,7 @@ export async function loginUser(
       password: true,
       isAdmin: true,
       isUserManager: true,
+      capabilities: { select: { capability: true } },
     },
   })
 
@@ -29,6 +30,7 @@ export async function loginUser(
 
   const isAdmin = user.isAdmin
   const isUserManager = user.isAdmin || user.isUserManager
+  const capabilities = user.capabilities.map(c => c.capability)
 
-  return { token: signToken(user.id, isAdmin, isUserManager) }
+  return { token: signToken(user.id, isAdmin, isUserManager, capabilities) }
 }

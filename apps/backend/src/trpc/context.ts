@@ -16,7 +16,7 @@ export async function createContext({ req, res }: CreateFastifyContextOptions) {
         // expires.
         const dbUser = await prisma.user.findUnique({
           where: { id: payload.userId },
-          select: { isAdmin: true, isUserManager: true },
+          select: { isAdmin: true, isUserManager: true, capabilities: { select: { capability: true } } },
         })
         if (dbUser) {
           user = {
@@ -24,6 +24,7 @@ export async function createContext({ req, res }: CreateFastifyContextOptions) {
             jti: payload.jti,
             isAdmin: dbUser.isAdmin,
             isUserManager: dbUser.isAdmin || dbUser.isUserManager,
+            capabilities: dbUser.capabilities.map(c => c.capability),
           }
         }
       }
