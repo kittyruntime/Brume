@@ -157,6 +157,11 @@ export const userRouter = router({
       granted: z.boolean(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const target = await ctx.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      })
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" })
       if (input.granted) {
         await ctx.prisma.userCapability.upsert({
           where: { userId_capability: { userId: input.userId, capability: input.capability } },

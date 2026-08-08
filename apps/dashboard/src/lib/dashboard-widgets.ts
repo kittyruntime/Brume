@@ -171,7 +171,8 @@ export function useDashboardWidgets() {
 
   function hasType(t: WidgetType) { return widgets.value.some(w => w.type === t) }
 
-  function canStorage() { return isAdmin.value || hasCapability('storage').value }
+  const storageCapability = hasCapability('storage')
+  function canStorage() { return isAdmin.value || storageCapability.value }
 
   // Reads live state on every call (not captured in a closure at timer-creation time) so
   // toggling which slow widget is present while the timer is already running never leaves a

@@ -57,7 +57,7 @@ and replies. Heavy work (large copies/moves, upload assembly) is run as a
 The API surface is the set of routers in `apps/backend/src/trpc/routers/`, each
 mapping to a feature area:
 
-`auth` · `user` · `role` · `permission` · `place` · `fs` · `container` ·
+`auth` · `user` · `permission` · `place` · `fs` · `container` ·
 `system` (disks/RAID/LVM/mounts) · `sharing` (SMB) · `audit` · `tasks`
 (background jobs) · `update` · `wallpaper`
 
@@ -65,9 +65,15 @@ mapping to a feature area:
 
 - Every user maps to an individual **Linux account**, so filesystem permissions
   are enforced at the OS level (writes are impersonated by the root-worker).
-- **Roles** carry a permission matrix over Users, Places, Files, Containers and
-  System categories; users are assigned to roles.
-- **Administrators bypass** all permission checks.
+- Access to a **place** (a filesystem root) is granted per user or per group as
+  Read/Write/Delete/Share, via `permission.ts`.
+- Two account-level flags grant broader access: **Admin** (bypasses all permission
+  checks) and **User manager** (can create/edit/delete other user accounts, but not
+  grant admin/user-manager/capabilities on them).
+- **Capabilities** grant a non-admin account a specific admin-adjacent power without
+  making them a full admin — e.g. the `storage` capability unlocks disk/RAID/LVM/
+  partition management. Admin implies every capability. New capabilities are added
+  by inserting rows, not by adding new account-level flags.
 - Every privileged action is written to the **audit log**.
 
 ## Request lifecycle (example: copy a large folder)

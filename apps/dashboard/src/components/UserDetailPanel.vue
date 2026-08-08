@@ -243,6 +243,7 @@ async function deleteUser() {
         </label>
       </div>
 
+      <p class="text-xs text-[var(--c-text-3)] px-0.5">Access changes apply immediately, but menus update after the account's next sign-in.</p>
       <p v-if="isSelf" class="text-xs text-[var(--c-text-3)] px-0.5">You can't change your own access.</p>
       <p v-if="accountError" class="text-[var(--c-danger)] text-xs px-0.5">{{ accountError }}</p>
       <p v-if="capabilityError" class="text-[var(--c-danger)] text-xs px-0.5">{{ capabilityError }}</p>
