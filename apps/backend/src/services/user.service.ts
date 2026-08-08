@@ -19,6 +19,7 @@ export const userSelect = {
   isAdmin: true,
   isUserManager: true,
   createdAt: true,
+  capabilities: { select: { capability: true } },
 } as const
 
 // A username must be a valid Linux account name so it can back the user's
