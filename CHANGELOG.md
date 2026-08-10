@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **RAID/SMART alerting**: a red dot now appears on the Storage nav entry (sidebar, mobile, and
+  desktop-mode Launchpad/Dock) when a RAID array is degraded or a disk's SMART status turns
+  warning/failed — checked every 5 minutes in the background, so you don't have to open Storage
+  to notice. Rebuilding arrays also show their resync progress percentage.
+
 ## [1.42.0] - 2026-08-10
 
 ### Added

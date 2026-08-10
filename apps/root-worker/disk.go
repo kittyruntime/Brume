@@ -1058,7 +1058,8 @@ type SmartResult struct {
 // handleSmartInfo queries S.M.A.R.T. data for a single block device.
 func handleSmartInfo(nc *nats.Conn, msg *nats.Msg) {
 	var req struct {
-		Device string `json:"device"` // bare name: sda, sdb, nvme0n1
+		Device string `json:"device"`           // bare name: sda, sdb, nvme0n1
+		NoWake bool   `json:"noWake,omitempty"` // skip (don't spin up) a disk currently in standby
 	}
 	if err := json.Unmarshal(msg.Data, &req); err != nil || !reBlockDev.MatchString(req.Device) {
 		replyErr(nc, msg.Reply, &fsError{Code: "ERR", Message: "invalid device"})
@@ -1077,7 +1078,12 @@ func handleSmartInfo(nc *nats.Conn, msg *nats.Msg) {
 		return
 	}
 
-	raw, err := exec.Command(smartctlPath, "-j", "-a", "/dev/"+req.Device).Output()
+	args := []string{"-j", "-a"}
+	if req.NoWake {
+		args = append(args, "-n", "standby")
+	}
+	args = append(args, "/dev/"+req.Device)
+	raw, err := exec.Command(smartctlPath, args...).Output()
 	if err != nil && len(raw) == 0 {
 		replyOk(nc, msg.Reply, result)
 		return
