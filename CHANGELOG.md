@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Telemetry hardware and version reporting**: disk discovery now follows the symbolic links
+  exposed by `/sys/block`, and packaged installations read their version from the installed
+  `VERSION` file instead of reporting `v0.0.0`. Existing installations send one immediate
+  corrective heartbeat after upgrading rather than retaining incomplete data for 24 hours.
+
 ## [1.44.0] - 2026-08-10
 
 ### Added

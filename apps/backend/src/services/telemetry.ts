@@ -5,6 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const CLIENT_REVISION = 2
 const TELEMETRY_URL = process.env.HSI_TELEMETRY_URL ?? "https://hsi-telemetry.theo-labs.dev/v1/heartbeat"
 const DATA_DIR = process.env.INSTALL_DIR ? path.join(process.env.INSTALL_DIR, "data") : path.resolve("data")
 const ID_FILE = path.join(DATA_DIR, "telemetry-installation-id")
@@ -69,7 +70,8 @@ export function getMemoryInformation() {
 export async function getDiskInformation() {
   const entries = await fs.readdir("/sys/block", { withFileTypes: true }).catch(() => [])
   const ignored = /^(loop|ram|zram|dm-|md)/
-  const disks = await Promise.all(entries.filter(e => e.isDirectory() && !ignored.test(e.name)).slice(0, 128).map(async entry => {
+  // /sys/block entries are symlinks on most Linux distributions.
+  const disks = await Promise.all(entries.filter(e => (e.isDirectory() || e.isSymbolicLink()) && !ignored.test(e.name)).slice(0, 128).map(async entry => {
     const base = path.join("/sys/block", entry.name)
     const [sectors, rotational] = await Promise.all([
       readText(path.join(base, "size")).catch(() => "0"),
@@ -84,10 +86,21 @@ export async function getDiskInformation() {
 
 async function getHsiVersion() {
   if (process.env.HSI_VERSION) return process.env.HSI_VERSION
+  const installRoot = process.env.INSTALL_DIR ? path.resolve(process.env.INSTALL_DIR) : process.cwd()
   try {
-    const rootPackage = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../package.json")
-    return `v${JSON.parse(await readText(rootPackage)).version}`
-  } catch { return "v0.0.0" }
+    const version = (await readText(path.join(installRoot, "VERSION"))).trim()
+    if (/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) return version
+  } catch { /* Development checkouts may not have a VERSION file. */ }
+  try {
+    const packagePath = path.join(installRoot, "package.json")
+    return `v${JSON.parse(await readText(packagePath)).version}`
+  } catch {
+    // Source-mode fallback when the backend is started from apps/backend.
+    try {
+      const rootPackage = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../package.json")
+      return `v${JSON.parse(await readText(rootPackage)).version}`
+    } catch { return "v0.0.0" }
+  }
 }
 
 export async function getTelemetryPayload() {
@@ -100,8 +113,10 @@ export async function getTelemetryPayload() {
 export async function shouldSendTelemetry() {
   if (/^(0|false|off|no)$/i.test(process.env.HSI_TELEMETRY_ENABLED ?? "true")) return false
   try {
-    const lastSent = Number.parseInt((await readText(STATE_FILE)).trim(), 10)
-    return !Number.isFinite(lastSent) || Date.now() - lastSent >= DAY_MS
+    const raw = (await readText(STATE_FILE)).trim()
+    const state = raw.startsWith("{") ? JSON.parse(raw) as { sentAt?: unknown; clientRevision?: unknown } : { sentAt: Number.parseInt(raw, 10), clientRevision: 0 }
+    const lastSent = typeof state.sentAt === "number" ? state.sentAt : Number.NaN
+    return state.clientRevision !== CLIENT_REVISION || !Number.isFinite(lastSent) || Date.now() - lastSent >= DAY_MS
   } catch { return true }
 }
 
@@ -116,7 +131,7 @@ export async function sendTelemetry() {
       signal: AbortSignal.timeout(3000), redirect: "error",
     })
     if (!response.ok) return false
-    await fs.writeFile(STATE_FILE, `${Date.now()}\n`, { encoding: "utf8", mode: 0o600 })
+    await fs.writeFile(STATE_FILE, `${JSON.stringify({ sentAt: Date.now(), clientRevision: CLIENT_REVISION })}\n`, { encoding: "utf8", mode: 0o600 })
     return true
   } catch { return false } finally { sending = false }
 }
