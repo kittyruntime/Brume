@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-08-10
+
 ### Added
 - **Anonymous telemetry**: the backend now sends a best-effort heartbeat at most once per day
   with a random persistent installation ID, the HSI version, Linux distribution, CPU, memory,
@@ -660,7 +662,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...HEAD
+[1.44.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.1...v1.41.0
