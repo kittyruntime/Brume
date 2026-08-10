@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.1] - 2026-08-10
+
 ### Fixed
 - **Telemetry hardware and version reporting**: disk discovery now follows the symbolic links
   exposed by `/sys/block`, and packaged installations read their version from the installed
@@ -668,7 +670,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...HEAD
+[1.44.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...v1.44.1
 [1.44.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.41.0...v1.42.0
