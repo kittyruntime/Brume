@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.47.0] - 2026-08-10
+
 ### Added
 - **Scheduled rsync data backups**: administrators can back up NAS folders to local or SSH targets,
   or pull a remote target onto the NAS, manually or on an hourly, daily or weekly schedule. Plans
@@ -697,7 +699,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.46.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.47.0...HEAD
+[1.47.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.46.0...v1.47.0
 [1.46.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...v1.46.0
 [1.45.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...v1.45.0
 [1.44.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...v1.44.1
