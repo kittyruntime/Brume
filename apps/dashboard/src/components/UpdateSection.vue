@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { trpc } from '../lib/trpc'
 import ReleaseNotes from './ReleaseNotes.vue'
+import { useConfirm } from '../lib/confirm'
 
 type Status = Awaited<ReturnType<typeof trpc.update.status.query>>
 
@@ -10,6 +11,10 @@ const loading  = ref(true)
 const applying = ref(false)
 const checking = ref(false)
 const error    = ref<string | null>(null)
+const restarting = ref(false)
+const rebooting = ref(false)
+const restartKind = ref<'update' | 'manual' | 'host'>('update')
+const { confirm } = useConfirm()
 
 type RestartStep = 'scheduled' | 'restarting' | 'reconnecting' | 'done'
 const restartStep     = ref<RestartStep | null>(null)
@@ -44,6 +49,7 @@ async function applyUpdate() {
   applying.value = true
   error.value = null
   try {
+    restartKind.value = 'update'
     await trpc.update.apply.mutate({ version: status.value.latest })
     restartStep.value = 'scheduled'
     setTimeout(() => {
@@ -56,11 +62,60 @@ async function applyUpdate() {
   }
 }
 
+async function restartSoftware() {
+  const accepted = await confirm(
+    'Restart HSI now? The interface will be unavailable for a few seconds. Running file transfers and in-progress tasks may be interrupted.',
+    { title: 'Restart HSI', confirmLabel: 'Restart now', danger: true },
+  )
+  if (!accepted) return
+  restarting.value = true
+  error.value = null
+  restartKind.value = 'manual'
+  try {
+    await trpc.update.restart.mutate()
+    restartStep.value = 'scheduled'
+    setTimeout(() => {
+      restartStep.value = 'restarting'
+      pollRestart()
+    }, 500)
+  } catch (e: any) {
+    error.value = e?.message ?? 'Failed to restart HSI'
+    restarting.value = false
+  }
+}
+
+async function rebootHost() {
+  const accepted = await confirm(
+    'Reboot the entire server? HSI, containers, file shares, and every service on this machine will be temporarily unavailable. Running tasks may be interrupted.',
+    { title: 'Reboot server', confirmLabel: 'Continue', danger: true },
+  )
+  if (!accepted) return
+  const confirmed = await confirm(
+    'Final confirmation: reboot the physical host now?',
+    { title: 'Confirm server reboot', confirmLabel: 'Reboot server', danger: true },
+  )
+  if (!confirmed) return
+  rebooting.value = true
+  error.value = null
+  restartKind.value = 'host'
+  try {
+    await trpc.update.rebootHost.mutate()
+    restartStep.value = 'scheduled'
+    setTimeout(() => {
+      restartStep.value = 'restarting'
+      pollRestart()
+    }, 500)
+  } catch (e: any) {
+    error.value = e?.message ?? 'Failed to reboot the server'
+    rebooting.value = false
+  }
+}
+
 function pollRestart() {
   let serverWentDown = false
   const interval = setInterval(async () => {
     try {
-      const res = await fetch('/health')
+      const res = await fetch('/health', { signal: AbortSignal.timeout(1500) })
       if (!res.ok) throw new Error('not ok')
       if (serverWentDown) {
         clearInterval(interval)
@@ -93,12 +148,14 @@ function formatDate(iso: string) {
   }).format(new Date(iso))
 }
 
-const STEPS: { key: RestartStep; label: string }[] = [
-  { key: 'scheduled',   label: 'Update scheduled' },
-  { key: 'restarting',  label: 'Server restarting' },
-  { key: 'reconnecting', label: 'Reconnecting' },
-  { key: 'done',        label: 'Ready' },
-]
+function stepLabel(key: RestartStep) {
+  if (key === 'scheduled') return restartKind.value === 'update' ? 'Update scheduled' : restartKind.value === 'host' ? 'Server reboot requested' : 'Restart requested'
+  if (key === 'restarting') return restartKind.value === 'update' ? 'Installing and restarting' : restartKind.value === 'host' ? 'Server rebooting' : 'HSI restarting'
+  if (key === 'reconnecting') return 'Reconnecting'
+  return 'Ready'
+}
+
+const STEPS: RestartStep[] = ['scheduled', 'restarting', 'reconnecting', 'done']
 
 const STEP_ORDER: RestartStep[] = ['scheduled', 'restarting', 'reconnecting', 'done']
 
@@ -131,22 +188,22 @@ onUnmounted(() => clearInterval(timer))
       <div class="panel-card p-6">
         <p class="eyebrow mb-6">Installing update</p>
         <div class="space-y-5">
-          <div v-for="step in STEPS" :key="step.key" class="flex items-center gap-3">
+          <div v-for="step in STEPS" :key="step" class="flex items-center gap-3">
             <!-- Icon -->
             <div
               :class="[
                 'w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors',
-                stepState(step.key) === 'done'   ? 'bg-[var(--c-success)]/15 text-[var(--c-success)]' :
-                stepState(step.key) === 'active' ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]'   :
+                stepState(step) === 'done'   ? 'bg-[var(--c-success)]/15 text-[var(--c-success)]' :
+                stepState(step) === 'active' ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]'   :
                 'bg-[var(--c-hover)] text-[var(--c-text-3)]'
               ]"
             >
               <!-- Done -->
-              <svg v-if="stepState(step.key) === 'done'" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <svg v-if="stepState(step) === 'done'" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
               </svg>
               <!-- Active spinning -->
-              <svg v-else-if="stepState(step.key) === 'active'" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <svg v-else-if="stepState(step) === 'active'" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
@@ -157,13 +214,13 @@ onUnmounted(() => clearInterval(timer))
             <span
               :class="[
                 'text-sm transition-colors',
-                stepState(step.key) === 'done'   ? 'text-[var(--c-text-2)]' :
-                stepState(step.key) === 'active' ? 'text-[var(--c-text-1)] font-medium' :
+                stepState(step) === 'done'   ? 'text-[var(--c-text-2)]' :
+                stepState(step) === 'active' ? 'text-[var(--c-text-1)] font-medium' :
                 'text-[var(--c-text-3)]'
               ]"
-            >{{ step.label }}</span>
+            >{{ stepLabel(step) }}</span>
             <!-- Countdown on done -->
-            <span v-if="step.key === 'done' && restartStep === 'done'" class="ml-auto text-xs text-[var(--c-text-3)] font-mono">
+            <span v-if="step === 'done' && restartStep === 'done'" class="ml-auto text-xs text-[var(--c-text-3)] font-mono">
               reloading in {{ reloadCountdown }}…
             </span>
           </div>
@@ -275,6 +332,40 @@ onUnmounted(() => clearInterval(timer))
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
           {{ checking ? 'Checking…' : 'Check now' }}
+        </button>
+      </div>
+
+      <div class="panel-card p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm font-medium text-[var(--c-text-1)]">Restart HSI</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--c-text-3)]">Restart the application backend without rebooting the host server.</p>
+        </div>
+        <button
+          @click="restartSoftware"
+          :disabled="restarting || applying || !!status.pending"
+          class="btn btn-outline btn-sm shrink-0"
+        >
+          <svg class="w-3.5 h-3.5" :class="restarting ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.93 4.93A10 10 0 102 12h3m-3 0V7m0 5h5"/>
+          </svg>
+          {{ restarting ? 'Restarting…' : 'Restart HSI' }}
+        </button>
+      </div>
+
+      <div class="panel-card p-5 border-[var(--c-danger)]/25 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm font-medium text-[var(--c-text-1)]">Reboot server</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--c-text-3)]">Restart the physical host and every service running on it.</p>
+        </div>
+        <button
+          @click="rebootHost"
+          :disabled="rebooting || restarting || applying || !!status.pending"
+          class="btn btn-danger btn-sm shrink-0"
+        >
+          <svg class="w-3.5 h-3.5" :class="rebooting ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v9m6.36-6.36a9 9 0 11-12.72 0"/>
+          </svg>
+          {{ rebooting ? 'Rebooting…' : 'Reboot server' }}
         </button>
       </div>
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Restart controls**: administrators can now restart the HSI application or reboot the entire
+  host from Settings → Updates. Both actions show a reconnect timeline; host reboot requires two
+  explicit confirmations, is audited, and is executed only by the privileged root-worker.
+
 ## [1.44.1] - 2026-08-10
 
 ### Fixed

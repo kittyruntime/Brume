@@ -3,6 +3,7 @@ import { z } from "zod"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { requestSync } from "../../nats"
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -39,6 +40,7 @@ function isNewer(candidate: string, current: string): boolean {
 }
 
 const GITHUB_REPO = "kittyruntime/home-server-interface"
+let restartScheduled = false
 
 export const updateRouter = router({
   status: adminProcedure.query(() => {
@@ -83,4 +85,20 @@ export const updateRouter = router({
       fs.writeFileSync(path.join(installDir(), ".pending-update"), input.version, "utf8")
       return { ok: true }
     }),
+
+  restart: adminProcedure.mutation(() => {
+    if (!restartScheduled) {
+      restartScheduled = true
+      // Respond to the browser and let the audit write complete before exiting.
+      // The service supervisor starts the backend again after EX_TEMPFAIL.
+      const timer = setTimeout(() => process.exit(75), 750)
+      timer.unref()
+    }
+    return { ok: true }
+  }),
+
+  rebootHost: adminProcedure.mutation(async () => {
+    await requestSync<{ scheduled: boolean }>("root.sys.reboot", {}, 5_000)
+    return { ok: true }
+  }),
 })
