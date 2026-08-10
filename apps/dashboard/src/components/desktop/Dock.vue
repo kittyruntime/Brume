@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useDesktop, APP_LABEL } from '../../lib/desktop'
+import { useAlerts } from '../../composables/useAlerts'
 import AppIcon from './AppIcon.vue'
 
 const { windows, focusWindow, toggleMinimize } = useDesktop()
+const { hasAlerts } = useAlerts()
 
 defineEmits<{ openLaunchpad: [] }>()
 
@@ -33,7 +35,7 @@ function onIconClick(id: string) {
     <button
       @click="$emit('openLaunchpad')"
       title="Launchpad"
-      class="w-8 h-8 rounded-lg bg-[var(--c-accent)] flex items-center justify-center text-[var(--c-accent-fg)] mb-5 select-none"
+      class="relative w-8 h-8 rounded-lg bg-[var(--c-accent)] flex items-center justify-center text-[var(--c-accent-fg)] mb-5 select-none"
     >
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <circle cx="8" cy="8" r="2.2"/>
@@ -41,6 +43,8 @@ function onIconClick(id: string) {
         <circle cx="8" cy="16" r="2.2"/>
         <circle cx="16" cy="16" r="2.2"/>
       </svg>
+      <span v-if="hasAlerts('storage.')"
+        class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
     </button>
 
     <div class="w-8 border-t border-[var(--c-border)] mb-3" />

@@ -52,7 +52,7 @@ async function checkSmart(): Promise<CheckResult[]> {
   for (const d of disks) {
     let smart: SmartResult
     try {
-      smart = await requestSync<SmartResult>("root.sys.smart", { device: d.name }, 15_000)
+      smart = await requestSync<SmartResult>("root.sys.smart", { device: d.name, noWake: true }, 15_000)
     } catch {
       continue // unreadable SMART data for this disk — skip, not an alert condition on its own
     }
@@ -78,14 +78,18 @@ async function runChecks(): Promise<void> {
       found = null // transient failure — leave this source's existing alerts as-is
     }
     if (found === null) continue
-    const targets = found.map(f => f.target)
-    await prisma.alert.deleteMany({ where: { source, target: { notIn: targets } } })
-    for (const f of found) {
-      await prisma.alert.upsert({
-        where: { source_target: { source, target: f.target } },
-        create: { source, target: f.target, message: f.message },
-        update: { message: f.message },
-      })
+    try {
+      const targets = found.map(f => f.target)
+      await prisma.alert.deleteMany({ where: { source, target: { notIn: targets } } })
+      for (const f of found) {
+        await prisma.alert.upsert({
+          where: { source_target: { source, target: f.target } },
+          create: { source, target: f.target, message: f.message },
+          update: { message: f.message },
+        })
+      }
+    } catch (e) {
+      console.error(`alert-sampler: failed to persist alerts for ${source}:`, e) // non-fatal: sampler errors must not crash the server
     }
   }
 }

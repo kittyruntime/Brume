@@ -102,6 +102,20 @@ md0 : active raid1 sdb1[1] sda1[0]
 				{Name: "md0", Level: "raid1", State: "active", Devices: []string{"sdb1", "sda1"}, Active: 2, Total: 2, ResyncPercent: nil},
 			},
 		},
+		{
+			name: "two arrays, first has no bracket line (raid0/linear)",
+			content: `Personalities : [raid0] [raid1]
+md0 : active raid0 sdb1[1] sda1[0]
+      2093056 blocks super 1.2 512k chunks
+
+md1 : active raid1 sdd1[1] sdc1[0]
+      1046528 blocks super 1.2 [2/1] [U_]
+`,
+			want: []raidArray{
+				{Name: "md0", Level: "raid0", State: "active", Devices: []string{"sdb1", "sda1"}, Active: 0, Total: 0},
+				{Name: "md1", Level: "raid1", State: "active", Devices: []string{"sdd1", "sdc1"}, Active: 1, Total: 2},
+			},
+		},
 	}
 
 	for _, tc := range cases {

@@ -992,6 +992,9 @@ func parseMdstat(content string) []raidArray {
 		// extra progress line follows: "[===>....] recovery = 45.2% (...) ..."
 		for j := i + 1; j < len(lines) && j <= i+4; j++ {
 			next := lines[j]
+			if strings.HasPrefix(next, "md") && strings.Contains(next, " : ") {
+				break // reached the next array's own header — stop, don't inherit its data
+			}
 			if active == 0 && total == 0 {
 				if start := strings.Index(next, "["); start >= 0 {
 					if end := strings.Index(next[start:], "]"); end >= 0 {
