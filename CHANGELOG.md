@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Anonymous telemetry**: the backend now sends a best-effort heartbeat at most once per day
+  with a random persistent installation ID, the HSI version, Linux distribution, CPU, memory,
+  and aggregate disk hardware details. It never sends hostnames, addresses, serial numbers,
+  filesystem paths, or user data; failures time out after three seconds without affecting HSI.
+  Set `HSI_TELEMETRY_ENABLED=false` to opt out.
+
 ## [1.43.0] - 2026-08-10
 
 ### Added

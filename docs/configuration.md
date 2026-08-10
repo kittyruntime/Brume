@@ -11,9 +11,17 @@
 | `DASHBOARD_PATH` | — | Path to the built dashboard the backend serves. In dev, point it at `apps/dashboard/dist`. |
 | `WALLPAPER_DIR` | under `INSTALL_DIR` | Where uploaded desktop wallpapers are stored. |
 | `NODE_ENV` | — | Standard Node environment flag. |
+| `HSI_TELEMETRY_ENABLED` | `true` | Set to `false`, `0`, `off` or `no` to disable anonymous daily telemetry. |
+| `HSI_TELEMETRY_URL` | `https://hsi-telemetry.theo-labs.dev/v1/heartbeat` | HTTPS heartbeat endpoint used by the best-effort telemetry client. |
+| `HSI_VERSION` | package version | Optional explicit version reported by packaged deployments. |
 
 > If `JWT_SECRET` is unset the backend logs a warning and uses an insecure
 > default — never do this in production.
+
+Telemetry sends only the anonymous hardware and version fields documented by
+the telemetry service. Failures time out after three seconds and never block
+startup or normal HSI features. The random installation UUID and last-success
+timestamp are stored under `INSTALL_DIR/data` and survive upgrades.
 
 ## Install / update options
 
