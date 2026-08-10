@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Encrypted configuration backup and restore**: administrators can export the complete HSI
+  configuration from Settings → Backup & restore, protected with AES-256-GCM and a
+  password-derived key. Restores verify the authenticated encryption, SQLite integrity and schema
+  compatibility, retain the previous database as a rollback copy, then restart HSI automatically.
+  Files stored in Places and Docker volume contents are deliberately excluded.
+
+### Fixed
+- **Update progress indicators**: update, restart and reconnect actions now use HSI's circular
+  loading indicator instead of the wedge-shaped inline SVG spinner.
+
 ## [1.45.0] - 2026-08-10
 
 ### Added

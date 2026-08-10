@@ -8,10 +8,11 @@ import GroupsSection from './GroupsSection.vue'
 import UpdateSection from './UpdateSection.vue'
 import PermissionsSection from './PermissionsSection.vue'
 import SharedLinksSection from './SharedLinksSection.vue'
+import BackupSection from './BackupSection.vue'
 
 const { isAdmin, isUserManager } = useAuth()
 
-type SectionId = 'profile' | 'users' | 'places' | 'permissions' | 'groups' | 'updates' | 'shares'
+type SectionId = 'profile' | 'users' | 'places' | 'permissions' | 'groups' | 'updates' | 'backups' | 'shares'
 
 const props = defineProps<{ focusSection?: SectionId | null }>()
 
@@ -30,6 +31,7 @@ const nav: NavItem[] = [
   { id: 'permissions', label: 'Permissions', show: () => isAdmin.value, group: 'admin' },
   { id: 'groups',      label: 'Groups',      show: () => isAdmin.value, group: 'admin' },
   { id: 'updates',     label: 'Updates',     show: () => isAdmin.value, group: 'admin' },
+  { id: 'backups',     label: 'Backup & restore', show: () => isAdmin.value, group: 'admin' },
 ]
 
 const visibleNav = computed(() => nav.filter(n => n.show()))
@@ -109,6 +111,10 @@ defineExpose({ focusOn })
             <svg v-else-if="item.id === 'updates'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
             </svg>
+            <!-- Backup icon -->
+            <svg v-else-if="item.id === 'backups'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7.5A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v9a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 16.5v-9zM8 5v5h8V5m-6 10h4"/>
+            </svg>
             {{ item.label }}
           </button>
         </div>
@@ -128,6 +134,7 @@ defineExpose({ focusOn })
         <PermissionsSection v-else-if="active === 'permissions'" />
         <GroupsSection      v-else-if="active === 'groups'" />
         <UpdateSection      v-else-if="active === 'updates'" />
+        <BackupSection      v-else-if="active === 'backups'" />
 
       </div>
     </div>

@@ -52,6 +52,14 @@ Dedicated app to manage the machine's block storage:
 ### Monitor (admin)
 Live and historical system metrics (CPU %, RAM, network — 1h/6h/24h/7d), system information, and a filterable **audit log** of every privileged action.
 
+### Configuration backup (admin)
+Export or restore a transactionally consistent copy of the HSI configuration from Settings →
+Backup & restore. The database is encrypted before download with AES-256-GCM and a
+password-derived key. Before restoration HSI verifies the authenticated encryption, SQLite
+integrity and schema compatibility, then retains the previous database as a local rollback copy.
+Configuration backups include accounts, permissions, shares, application definitions and settings,
+but not files stored in Places or Docker volume contents.
+
 ### Network sharing (admin)
 Share any Place over SMB via Samba, managed from the **Sharing** app: per-place read-only/guest options, live connections view, and NAS-style password sync across web, Linux and Samba accounts. Requires `samba` on the host.
 

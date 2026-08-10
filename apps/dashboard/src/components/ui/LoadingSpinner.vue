@@ -12,7 +12,7 @@ withDefaults(defineProps<{ label?: string }>(), { label: 'Loading' })
         stroke-linecap="round" stroke-dasharray="30.6 10.2"
       />
     </svg>
-    <span class="spinner-label">{{ label }}</span>
+    <span v-if="label" class="spinner-label">{{ label }}</span>
   </span>
 </template>
 

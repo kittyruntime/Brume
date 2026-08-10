@@ -10,6 +10,7 @@ import { healthRoutes } from "./routes/health"
 import { fileRoutes } from "./routes/files"
 import { shareRoutes } from "./routes/share"
 import { containerRoutes } from "./routes/containers"
+import { backupRoutes } from "./routes/backup"
 import { appRouter } from "./trpc/routers/index"
 import { createContext } from "./trpc/context"
 export { connectNats, startEventSubscriber } from "./nats"
@@ -61,6 +62,7 @@ export function buildApp() {
     app.register(fileRoutes)
     app.register(shareRoutes)
     app.register(containerRoutes)
+    app.register(backupRoutes)
 
     app.register(fastifyTRPCPlugin, {
         prefix: "/trpc",

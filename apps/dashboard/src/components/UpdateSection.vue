@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { trpc } from '../lib/trpc'
 import ReleaseNotes from './ReleaseNotes.vue'
 import { useConfirm } from '../lib/confirm'
+import LoadingSpinner from './ui/LoadingSpinner.vue'
 
 type Status = Awaited<ReturnType<typeof trpc.update.status.query>>
 
@@ -186,7 +187,7 @@ onUnmounted(() => clearInterval(timer))
     <!-- ── Restart timeline ─────────────────────────────────────────────── -->
     <div v-if="restartStep" class="space-y-6">
       <div class="panel-card p-6">
-        <p class="eyebrow mb-6">Installing update</p>
+        <p class="eyebrow mb-6">{{ restartKind === 'update' ? 'Installing update' : restartKind === 'host' ? 'Rebooting server' : 'Restarting HSI' }}</p>
         <div class="space-y-5">
           <div v-for="step in STEPS" :key="step" class="flex items-center gap-3">
             <!-- Icon -->
@@ -203,10 +204,7 @@ onUnmounted(() => clearInterval(timer))
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
               </svg>
               <!-- Active spinning -->
-              <svg v-else-if="stepState(step) === 'active'" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg>
+              <LoadingSpinner v-else-if="stepState(step) === 'active'" label="" />
               <!-- Pending dot -->
               <span v-else class="w-1.5 h-1.5 rounded-full bg-current" />
             </div>
@@ -293,10 +291,7 @@ onUnmounted(() => clearInterval(timer))
           :disabled="applying || status.pending"
           class="btn btn-primary btn-sm shrink-0"
         >
-          <svg v-if="applying || status.pending" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
+          <LoadingSpinner v-if="applying || status.pending" label="" />
           {{ applying || status.pending ? 'Scheduling…' : 'Install update' }}
         </button>
       </div>
@@ -324,9 +319,9 @@ onUnmounted(() => clearInterval(timer))
           :disabled="checking || applying || !!status.pending"
           class="btn btn-outline btn-xs"
         >
+          <LoadingSpinner v-if="checking" label="" />
           <svg
-            class="w-3 h-3"
-            :class="checking ? 'animate-spin' : ''"
+            v-else class="w-3 h-3"
             fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
           >
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -345,7 +340,8 @@ onUnmounted(() => clearInterval(timer))
           :disabled="restarting || applying || !!status.pending"
           class="btn btn-outline btn-sm shrink-0"
         >
-          <svg class="w-3.5 h-3.5" :class="restarting ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <LoadingSpinner v-if="restarting" label="" />
+          <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4.93 4.93A10 10 0 102 12h3m-3 0V7m0 5h5"/>
           </svg>
           {{ restarting ? 'Restarting…' : 'Restart HSI' }}
@@ -362,7 +358,8 @@ onUnmounted(() => clearInterval(timer))
           :disabled="rebooting || restarting || applying || !!status.pending"
           class="btn btn-danger btn-sm shrink-0"
         >
-          <svg class="w-3.5 h-3.5" :class="rebooting ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <LoadingSpinner v-if="rebooting" label="" />
+          <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v9m6.36-6.36a9 9 0 11-12.72 0"/>
           </svg>
           {{ rebooting ? 'Rebooting…' : 'Reboot server' }}

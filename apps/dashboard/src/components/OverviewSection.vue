@@ -113,6 +113,9 @@ function actionLabel(action: string): string {
     'role.create':               'Create role',
     'role.delete':               'Delete role',
     'update.trigger':            'Trigger update',
+    'update.restart':            'Restart HSI',
+    'update.rebootHost':         'Reboot server',
+    'system.configBackup':       'Export configuration backup',
   }
   return map[action] ?? action
 }
