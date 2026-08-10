@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Mobile layout overflow**: the bottom navigation now shares the available viewport width instead
+  of extending the page, wide dashboard widgets collapse to one column on phones, and settings,
+  storage, monitoring, sharing, App Store, audit and backup screens use responsive spacing and
+  wrapping. The shell now follows the dynamic mobile viewport and respects safe-area insets.
+
+### Changed
+- **Frontend polish**: form controls have clearer focus feedback, keyboard focus is consistent, and
+  mobile cards, headers and action groups have more balanced spacing and touch-friendly layouts.
+
 ## [1.47.0] - 2026-08-10
 
 ### Added

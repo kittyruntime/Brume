@@ -62,7 +62,7 @@ const active = ref<SectionId>('overview')
 
     <!-- Content -->
     <div class="flex-1 overflow-y-auto">
-      <div :class="['p-8', active === 'audit' ? 'max-w-5xl' : 'max-w-4xl']">
+      <div :class="['p-4 sm:p-8', active === 'audit' ? 'max-w-5xl' : 'max-w-4xl']">
         <OverviewSection  v-if="active === 'overview'" />
         <SystemSection    v-else-if="active === 'system'" />
         <AuditLogSection  v-else-if="active === 'audit'" />

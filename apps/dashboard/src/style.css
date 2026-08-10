@@ -151,6 +151,15 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
 /* Tailwind's preflight no longer forces a pointer cursor on <button>; browsers
    default it to "default". Restore it everywhere except disabled buttons. */
 button:not(:disabled),
@@ -246,7 +255,19 @@ select:not(:disabled),
   outline: none;
   transition: border-color 150ms;
 }
-.ui-input:focus { border-color: var(--c-text-1); }
+.ui-input:focus {
+  border-color: var(--c-text-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 10%, transparent);
+}
+
+.btn:focus-visible,
+.ui-input:focus-visible,
+button:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
 
 /* Badges / tags — soft tinted backgrounds, moderate radius */
 .badge {

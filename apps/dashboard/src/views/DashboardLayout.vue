@@ -222,7 +222,7 @@ onUnmounted(() => {
   <!-- Single root wrapper: required so the route <Transition> in App.vue can
        animate this view and its style fallthrough (--ui-dur) merges here. -->
   <div>
-  <div class="flex flex-col sm:flex-row h-screen w-screen bg-[var(--c-bg)]">
+  <div class="flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-[var(--c-bg)] sm:flex-row">
 
     <!-- Sidebar: 64px (desktop only) -->
     <aside class="hidden sm:flex flex-col items-center w-16 bg-[var(--c-sidebar)] border-r border-[var(--c-border)] py-4 flex-shrink-0">
@@ -396,7 +396,7 @@ onUnmounted(() => {
     </Teleport>
 
     <!-- Main area -->
-    <main class="flex-1 flex flex-col overflow-hidden">
+    <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <!-- Default-password warning: dismissible, links straight to the profile
            where the password can be changed. -->
       <div
@@ -424,7 +424,7 @@ onUnmounted(() => {
       <DesktopShell v-if="desktopMode && !isMobile" />
       <template v-else>
         <!-- Top bar (hidden for files — FileToolbar acts as the header) -->
-        <header v-if="activeApp !== 'files'" class="h-11 flex items-center justify-between px-6 border-b border-[var(--c-border)] flex-shrink-0 bg-[var(--c-surface-alt)]">
+        <header v-if="activeApp !== 'files'" class="h-11 flex items-center justify-between px-4 sm:px-6 border-b border-[var(--c-border)] flex-shrink-0 bg-[var(--c-surface-alt)]">
           <span class="eyebrow">{{ activeAppLabel }}</span>
           <button
             v-if="activeApp === 'apps' && isAdmin"
@@ -440,7 +440,7 @@ onUnmounted(() => {
 
         <!-- Content — the keyed wrapper (not the panels: FileBrowserPanel is
              multi-root) cross-fades on app switch, like routes do. -->
-        <div :class="['flex-1', activeApp !== 'dashboard' ? 'overflow-hidden' : 'overflow-auto']">
+        <div :class="['min-w-0 flex-1', activeApp !== 'dashboard' ? 'overflow-hidden' : 'overflow-auto']">
           <Transition name="ui-fade" mode="out-in">
           <div :key="activeApp" class="h-full route-fade">
           <DashboardPanel v-if="activeApp === 'dashboard'" class="h-full" />
@@ -466,14 +466,14 @@ onUnmounted(() => {
     </main>
 
     <!-- Mobile bottom nav -->
-    <nav class="flex sm:hidden flex-shrink-0 items-center justify-around h-14 bg-[var(--c-sidebar)] border-t border-[var(--c-border)] px-1">
+    <nav class="flex sm:hidden w-full flex-shrink-0 items-center h-14 overflow-hidden bg-[var(--c-sidebar)] border-t border-[var(--c-border)] px-1 pb-[env(safe-area-inset-bottom)]">
 
       <!-- App nav (order mirrors the sidebar; not draggable on mobile) -->
-      <div v-for="item in navItems" :key="item.id" class="relative flex justify-center">
+      <div v-for="item in navItems" :key="item.id" class="relative flex min-w-0 flex-1 justify-center">
         <span v-if="isActive(item.id)"
           class="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-0.5 bg-[var(--c-accent)] rounded-t-full" />
         <button @click="selectApp(item.id)" :title="item.label"
-          :class="['relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-150',
+          :class="['relative h-11 w-full max-w-11 rounded-xl flex items-center justify-center transition-all duration-150',
             isActive(item.id) ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]']">
           <SidebarNavIcon :id="item.id" />
           <span v-if="item.id === 'settings' && updateAvailable && !isActive('settings')"
@@ -485,7 +485,7 @@ onUnmounted(() => {
 
       <!-- Notifications bell -->
       <button @click.stop="toggleNotifMenu" title="Activity"
-        :class="['relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-150',
+        :class="['relative h-11 min-w-0 flex-1 rounded-xl flex items-center justify-center transition-all duration-150',
           notifMenuOpen ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]']">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
@@ -497,9 +497,9 @@ onUnmounted(() => {
 
       <!-- User avatar -->
       <button @click.stop="toggleUserMenu" title="Account"
-        class="w-9 h-9 rounded-full bg-[var(--c-accent)] flex items-center justify-center text-[var(--c-accent-fg)] text-xs font-bold select-none transition-all duration-150"
-        :class="userMenuOpen ? 'ring-2 ring-[var(--c-accent)] ring-offset-2 ring-offset-[var(--c-sidebar)]' : 'opacity-80'">
-        {{ initials }}
+        class="flex h-11 min-w-0 flex-1 items-center justify-center text-xs font-bold select-none">
+        <span class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--c-accent)] text-[var(--c-accent-fg)] transition-all duration-150"
+          :class="userMenuOpen ? 'ring-2 ring-[var(--c-accent)] ring-offset-2 ring-offset-[var(--c-sidebar)]' : 'opacity-80'">{{ initials }}</span>
       </button>
 
     </nav>

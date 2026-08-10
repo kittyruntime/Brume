@@ -127,7 +127,7 @@ defineExpose({ focusOn })
 
     <!-- ── Content area ───────────────────────────────────────────────── -->
     <div class="flex-1 overflow-y-auto">
-      <div :class="['p-8', ['users','groups','permissions'].includes(active) ? 'max-w-5xl' : 'max-w-2xl']">
+      <div :class="['p-4 sm:p-8', ['users','groups','permissions'].includes(active) ? 'max-w-5xl' : 'max-w-2xl']">
 
         <ProfileSection     v-if="active === 'profile'" />
         <SharedLinksSection v-else-if="active === 'shares'" />

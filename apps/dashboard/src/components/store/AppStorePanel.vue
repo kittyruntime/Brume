@@ -68,7 +68,7 @@ onUnmounted(() => { if (poll !== null) clearInterval(poll) })
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-6">
+  <div class="h-full overflow-y-auto p-4 sm:p-6">
     <div v-if="selected">
       <button class="btn btn-ghost btn-sm mb-3" @click="selected = null">← Back</button>
       <AppInstallWizard :app-id="selected.id" @installed="selected = null; load()" @close="selected = null" />
@@ -76,7 +76,7 @@ onUnmounted(() => { if (poll !== null) clearInterval(poll) })
 
     <template v-else>
       <!-- Header -->
-      <div class="flex items-center justify-between gap-3 mb-1">
+      <div class="flex flex-col items-stretch gap-3 mb-1 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-base font-semibold text-[var(--c-text-1)]">App Store</h2>
         <input v-model="search" placeholder="Search apps…" class="ui-input max-w-xs" />
       </div>

@@ -74,7 +74,7 @@ function focusOn(section: SectionId) {
 
     <!-- Content -->
     <div class="flex-1 overflow-y-auto">
-      <div class="p-8 max-w-5xl">
+      <div class="p-4 sm:p-8 max-w-5xl">
         <PhysicalDisksSection v-if="active === 'disks'"  @navigate="focusOn" />
         <RaidSection          v-else-if="active === 'raid'"   @navigate="focusOn" />
         <LvmSection           v-else-if="active === 'lvm'" />

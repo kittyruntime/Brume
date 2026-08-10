@@ -127,8 +127,8 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> | nu
     <p class="text-sm text-[var(--c-text-3)] mb-6">All actions performed by authenticated users.</p>
 
     <!-- Filter -->
-    <div class="flex gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+    <div class="flex gap-3 mb-5 min-w-0">
+      <div class="relative flex-1 min-w-0">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--c-text-3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
