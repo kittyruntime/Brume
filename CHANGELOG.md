@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-08-10
+
 ### Added
 - **RAID/SMART alerting**: a red dot now appears on the Storage nav entry (sidebar, mobile, and
   desktop-mode Launchpad/Dock) when a RAID array is degraded or a disk's SMART status turns
@@ -651,7 +653,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.42.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...HEAD
+[1.43.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.1...v1.41.0
 [1.40.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.40.0...v1.40.1
