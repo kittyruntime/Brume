@@ -35,6 +35,7 @@ const TASK_STREAM = {
     "root.network.remove",
     "root.volume.create",
     "root.volume.remove",
+    "root.backup.rsync",
   ],
 }
 

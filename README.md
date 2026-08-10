@@ -60,6 +60,13 @@ integrity and schema compatibility, then retains the previous database as a loca
 Configuration backups include accounts, permissions, shares, application definitions and settings,
 but not files stored in Places or Docker volume contents.
 
+### Data backups with rsync (admin)
+Create manual, hourly, daily or weekly plans from Settings → Data backups. HSI can copy a NAS
+folder to a local or SSH destination, or pull a remote folder onto the NAS. Plans support exclusion
+patterns, compression, bandwidth limiting and an explicitly enabled mirror mode. Remote transfers
+use an existing SSH key (mode 0600 or stricter) and strict `known_hosts` verification; passwords are
+never stored. `rsync` and the OpenSSH client must be installed on the server.
+
 ### Network sharing (admin)
 Share any Place over SMB via Samba, managed from the **Sharing** app: per-place read-only/guest options, live connections view, and NAS-style password sync across web, Linux and Samba accounts. Requires `samba` on the host.
 

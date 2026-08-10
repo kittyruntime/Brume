@@ -2,6 +2,7 @@ import { buildApp, connectNats, startEventSubscriber } from "./app"
 import { startMetricsSampler } from "./services/metrics-sampler"
 import { startAlertSampler } from "./services/alert-sampler"
 import { startTelemetry } from "./services/telemetry"
+import { startBackupScheduler } from "./services/backup-scheduler"
 
 const app = buildApp()
 
@@ -11,6 +12,7 @@ const start = async () => {
     startMetricsSampler()
     startAlertSampler()
     startTelemetry()
+    startBackupScheduler()
     void startEventSubscriber(app.log).catch(err => {
       app.log.error(err, "nats: event subscriber fatal error")
       process.exit(1)

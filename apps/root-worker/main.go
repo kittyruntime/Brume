@@ -51,6 +51,18 @@ type taskMsg struct {
 	AllowedRoot    string   `json:"allowedRoot"`
 	DstAllowedRoot string   `json:"dstAllowedRoot"`
 	Paths          []string `json:"paths"`
+	PlanID         string   `json:"planId"`
+	Direction      string   `json:"direction"`
+	Source         string   `json:"source"`
+	Destination    string   `json:"destination"`
+	RemoteHost     string   `json:"remoteHost"`
+	RemoteUser     string   `json:"remoteUser"`
+	RemotePort     int      `json:"remotePort"`
+	SSHKeyPath     string   `json:"sshKeyPath"`
+	DeleteExtra    bool     `json:"deleteExtra"`
+	Compress       bool     `json:"compress"`
+	BandwidthLimit int      `json:"bandwidthLimit"`
+	Excludes       []string `json:"excludes"`
 }
 
 // syncMsg is the payload for request-reply operations.
@@ -143,6 +155,7 @@ var taskSubjects = []string{
 	"root.network.remove",
 	"root.volume.create",
 	"root.volume.remove",
+	"root.backup.rsync",
 }
 
 func ensureStream(js nats.JetStreamContext) error {
@@ -817,6 +830,7 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 		if fsErr == nil {
 			fsErr = validatePathsScoped(task.DstAllowedRoot, task.DstDir)
 		}
+
 		if fsErr == nil {
 			err := withUser(task.LinuxUsername, func() error {
 				fsErr = doUnzip(task.Src, task.DstDir)
@@ -831,6 +845,9 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 			result = map[string]bool{"ok": true}
 		}
 
+	case "root.backup.rsync":
+		result, fsErr = doRsyncBackup(task)
+
 	default:
 		log.Printf("unknown subject: %s", subject)
 		_ = msg.Term()
@@ -838,7 +855,13 @@ func handleTask(nc *nats.Conn, msg *nats.Msg) {
 	}
 
 	if fsErr != nil {
-		_ = msg.Nak()
+		// An rsync failure is a completed attempt, not a transient queue failure.
+		// Retrying it behind the UI's back could overlap a later manual/scheduled run.
+		if subject == "root.backup.rsync" {
+			_ = msg.Ack()
+		} else {
+			_ = msg.Nak()
+		}
 		publishJobResult(nc, task.JobID, "failed", nil, fsErr.Message)
 	} else {
 		_ = msg.Ack()

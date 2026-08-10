@@ -1,0 +1,27 @@
+model BackupPlan {
+  id             String   @id @default(uuid())
+  name           String
+  direction      String   // push | pull
+  source         String
+  destination    String
+  remoteHost     String?
+  remoteUser     String?
+  remotePort     Int      @default(22)
+  sshKeyPath     String?
+  schedule       String   @default("manual") // manual | hourly | daily | weekly
+  scheduleHour   Int      @default(2)
+  scheduleMinute Int      @default(0)
+  scheduleWeekday Int     @default(0)
+  deleteExtra    Boolean  @default(false)
+  compress       Boolean  @default(true)
+  bandwidthLimit Int?
+  excludes       String   @default("[]")
+  enabled        Boolean  @default(true)
+  lastJobId      String?
+  lastStatus     String?
+  lastRunAt      DateTime?
+  lastError      String?
+  nextRunAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

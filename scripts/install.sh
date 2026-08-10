@@ -240,6 +240,8 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   check_cmd go      "Install Go ≥ 1.21 from https://go.dev/dl/"
   check_cmd openssl "apt install openssl"
   check_cmd curl    "apt install curl"
+  check_cmd rsync   "apt install rsync"
+  check_cmd ssh     "apt install openssh-client"
 
   NODE_MAJOR=$(node --version | sed 's/v\([0-9]*\).*/\1/')
   [[ "$NODE_MAJOR" -ge 18 ]] || die "Node.js 18+ required, found $(node --version)"
@@ -262,6 +264,8 @@ else
   step "Checking prerequisites"
   command -v curl    &>/dev/null || die "'curl' not found. apt install curl"
   command -v openssl &>/dev/null || die "'openssl' not found. apt install openssl"
+  command -v rsync   &>/dev/null || die "'rsync' not found. apt install rsync"
+  command -v ssh     &>/dev/null || die "'ssh' not found. apt install openssh-client"
   success "Prerequisites satisfied"
 
   step "Resolving release version"

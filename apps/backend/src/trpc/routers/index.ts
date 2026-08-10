@@ -15,6 +15,7 @@ import { sharingRouter } from "./sharing"
 import { shareLinkRouter } from "./shareLink"
 import { catalogRouter } from "./catalog"
 import { alertRouter } from "./alert"
+import { backupRouter } from "./backup"
 
 export const appRouter = router({
   auth: authRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   shareLink: shareLinkRouter,
   catalog: catalogRouter,
   alert: alertRouter,
+  backup: backupRouter,
 })
 
 export type AppRouter = typeof appRouter

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Scheduled rsync data backups**: administrators can back up NAS folders to local or SSH targets,
+  or pull a remote target onto the NAS, manually or on an hourly, daily or weekly schedule. Plans
+  support exclusions, compression, bandwidth limits, execution status and an optional mirror mode.
+  SSH transfers require a pre-provisioned key and strict host-key verification; HSI stores no SSH
+  passwords and invokes rsync without a shell.
+
 ## [1.46.0] - 2026-08-10
 
 ### Added

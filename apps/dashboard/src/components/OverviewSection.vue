@@ -116,6 +116,10 @@ function actionLabel(action: string): string {
     'update.restart':            'Restart HSI',
     'update.rebootHost':         'Reboot server',
     'system.configBackup':       'Export configuration backup',
+    'backup.create':             'Create data backup plan',
+    'backup.update':             'Update data backup plan',
+    'backup.delete':             'Delete data backup plan',
+    'backup.run':                'Run data backup',
   }
   return map[action] ?? action
 }
