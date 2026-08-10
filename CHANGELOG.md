@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.46.0] - 2026-08-10
+
 ### Added
 - **Encrypted configuration backup and restore**: administrators can export the complete HSI
   configuration from Settings → Backup & restore, protected with AES-256-GCM and a
@@ -688,7 +690,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.46.0...HEAD
+[1.46.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...v1.46.0
 [1.45.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...v1.45.0
 [1.44.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...v1.44.1
 [1.44.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...v1.44.0
