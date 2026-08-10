@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-08-10
+
 ### Added
 - **Restart controls**: administrators can now restart the HSI application or reboot the entire
   host from Settings → Updates. Both actions show a reconnect timeline; host reboot requires two
@@ -675,7 +677,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...HEAD
+[1.45.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...v1.45.0
 [1.44.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.0...v1.44.1
 [1.44.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.42.0...v1.43.0
