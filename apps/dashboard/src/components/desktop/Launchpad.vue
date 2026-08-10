@@ -2,12 +2,14 @@
 import { computed, ref } from 'vue'
 import { useDesktop, APP_LABEL, type AppId } from '../../lib/desktop'
 import { useAuth } from '../../lib/auth'
+import { useAlerts } from '../../composables/useAlerts'
 import { useEscLayer } from '../../lib/escLayer'
 import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{ close: [] }>()
 const { openApp } = useDesktop()
 const { isAdmin, hasCapability } = useAuth()
+const { hasAlerts } = useAlerts()
 
 const visible = ref(true)
 function requestClose() { visible.value = false }
@@ -52,8 +54,10 @@ useEscLayer(requestClose)
           @click="launch(id)"
           class="flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-[var(--c-hover)] transition-colors"
         >
-          <div class="w-16 h-16 rounded-xl bg-[var(--c-surface)] border border-[var(--c-border-strong)] flex items-center justify-center text-[var(--c-text-2)]">
+          <div class="relative w-16 h-16 rounded-xl bg-[var(--c-surface)] border border-[var(--c-border-strong)] flex items-center justify-center text-[var(--c-text-2)]">
             <AppIcon :app="id" :stroke-width="1.5" class="w-7 h-7" />
+            <span v-if="id === 'storage' && hasAlerts('storage.')"
+              class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
           </div>
           <span class="eyebrow">{{ APP_LABEL[id] }}</span>
         </button>

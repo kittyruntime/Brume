@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../lib/auth'
+import { useAlerts } from '../composables/useAlerts'
 import { useNotifications } from '../lib/notifications'
 import { useDesktop } from '../lib/desktop'
 import { trpc } from '../lib/trpc'
@@ -28,6 +29,7 @@ import DesktopShell from '../components/desktop/DesktopShell.vue'
 
 const router = useRouter()
 const { currentUsername, isAdmin, hasCapability, logout } = useAuth()
+const { hasAlerts } = useAlerts()
 const { notifications } = useNotifications()
 const { desktopMode, setDesktopMode, openApp } = useDesktop()
 
@@ -273,6 +275,10 @@ onUnmounted(() => {
                 v-if="item.id === 'settings' && updateAvailable && !isActive('settings')"
                 class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--c-warning)]"
               />
+              <span
+                v-if="item.id === 'storage' && hasAlerts('storage.') && !isActive('storage')"
+                class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger"
+              />
             </button>
           </div>
         </nav>
@@ -472,6 +478,8 @@ onUnmounted(() => {
           <SidebarNavIcon :id="item.id" />
           <span v-if="item.id === 'settings' && updateAvailable && !isActive('settings')"
             class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--c-warning)]" />
+          <span v-if="item.id === 'storage' && hasAlerts('storage.') && !isActive('storage')"
+            class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
         </button>
       </div>
 

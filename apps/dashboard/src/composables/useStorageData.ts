@@ -28,6 +28,7 @@ export type RaidArray = {
   devices: string[]
   active:  number
   total:   number
+  resyncPercent?: number | null
 }
 
 export type LvmPV = { name: string; vgName: string; size: number; free: number }

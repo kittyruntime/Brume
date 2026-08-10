@@ -246,7 +246,7 @@ const openMenu = ref<string | null>(null)
               <span class="text-[11px] text-[var(--c-text-3)]">{{ r.active }}/{{ r.total }} drives</span>
               <span class="inline-flex items-center gap-1.5 text-[11px] font-medium" :class="isRaidHealthy(r) ? 'text-success' : 'text-danger'">
                 <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="isRaidHealthy(r) ? 'bg-success' : 'bg-danger animate-pulse'"/>
-                {{ isRaidHealthy(r) ? 'Healthy' : r.state }}
+                {{ isRaidHealthy(r) ? 'Healthy' : (r.resyncPercent != null ? `${r.state} — ${r.resyncPercent.toFixed(1)}%` : r.state) }}
               </span>
               <!-- Cross-nav: RAID used as LVM PV -->
               <button v-if="raidPvVg(r.name)" @click="emit('navigate', 'lvm')"
