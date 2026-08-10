@@ -272,7 +272,7 @@ async function save() {
   <div class="flex flex-col h-full">
 
     <!-- Header -->
-    <div class="flex items-center gap-3 px-5 py-3 border-b border-[var(--c-border)] shrink-0">
+    <div class="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-[var(--c-border)] shrink-0">
       <button
         @click="emit('close')"
         class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors"
@@ -298,12 +298,12 @@ async function save() {
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
         </svg>
-        Import Compose
+        <span class="hidden sm:inline">Import Compose</span><span class="sm:hidden">Compose</span>
       </button>
     </div>
 
     <!-- Compose import panel -->
-    <div v-if="showCompose" class="px-6 py-4 border-b border-[var(--c-border)] bg-[var(--c-surface-alt)]/60 space-y-3 shrink-0">
+    <div v-if="showCompose" class="px-4 sm:px-6 py-4 border-b border-[var(--c-border)] bg-[var(--c-surface-alt)]/60 space-y-3 shrink-0">
       <p class="text-xs text-[var(--c-text-3)]">Paste a <span class="font-mono">compose.yml</span> to auto-fill the form.</p>
       <textarea
         v-model="composeRaw"
@@ -311,7 +311,7 @@ async function save() {
         rows="8"
         class="w-full bg-[var(--c-surface-deep)] border border-[var(--c-border-strong)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--c-text-2)] focus:outline-none focus:border-[var(--c-accent)] resize-none"
       />
-      <div class="flex items-center gap-3">
+      <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
         <div v-if="composeServices.length > 1" class="flex items-center gap-2 flex-1">
           <label class="text-xs text-[var(--c-text-3)] whitespace-nowrap">Service:</label>
           <select
@@ -351,7 +351,7 @@ async function save() {
     </div>
 
     <!-- Tab content -->
-    <div class="flex-1 overflow-y-auto px-6 py-5">
+    <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
 
       <!-- Basic -->
       <div v-if="activeTab === 'basic'" class="space-y-4">

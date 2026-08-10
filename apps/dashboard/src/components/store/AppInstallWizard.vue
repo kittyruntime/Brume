@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { trpc } from '../../lib/trpc'
 import type { Place } from '../apps/VolumesTable.vue'
+import LoadingState from '../ui/LoadingState.vue'
+import ErrorState from '../ui/ErrorState.vue'
 
 type Manifest     = Awaited<ReturnType<typeof trpc.catalog.get.query>>
 type InstallInput = Parameters<typeof trpc.catalog.install.mutate>[0]
@@ -198,12 +200,9 @@ async function install() {
 <template>
   <div class="panel-card p-5 space-y-5">
 
-    <div v-if="loading" class="text-sm text-[var(--c-text-3)]">Loading…</div>
+    <LoadingState v-if="loading" compact />
 
-    <div v-else-if="loadError" class="space-y-3">
-      <p class="text-sm text-[var(--c-danger)]">{{ loadError }}</p>
-      <button class="btn btn-outline btn-sm" @click="emit('close')">Back</button>
-    </div>
+    <div v-else-if="loadError"><ErrorState :message="loadError" /><div class="flex justify-center"><button class="btn btn-outline btn-sm" @click="emit('close')">Back</button></div></div>
 
     <template v-else-if="manifest">
       <!-- Header -->

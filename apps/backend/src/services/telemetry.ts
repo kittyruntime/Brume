@@ -5,7 +5,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const CLIENT_REVISION = 2
+const RETRY_MS = 60 * 60 * 1000
+const CLIENT_REVISION = 3
 const TELEMETRY_URL = process.env.HSI_TELEMETRY_URL ?? "https://hsi-telemetry.theo-labs.dev/v1/heartbeat"
 const DATA_DIR = process.env.INSTALL_DIR ? path.join(process.env.INSTALL_DIR, "data") : path.resolve("data")
 const ID_FILE = path.join(DATA_DIR, "telemetry-installation-id")
@@ -128,7 +129,7 @@ export async function sendTelemetry() {
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) return false
     const response = await fetch(endpoint, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(await getTelemetryPayload()),
-      signal: AbortSignal.timeout(3000), redirect: "error",
+      signal: AbortSignal.timeout(10_000), redirect: "error",
     })
     if (!response.ok) return false
     await fs.writeFile(STATE_FILE, `${JSON.stringify({ sentAt: Date.now(), clientRevision: CLIENT_REVISION })}\n`, { encoding: "utf8", mode: 0o600 })
@@ -136,9 +137,20 @@ export async function sendTelemetry() {
   } catch { return false } finally { sending = false }
 }
 
-export function startTelemetry() {
-  const run = () => { void sendTelemetry() }
-  run()
-  const timer = setInterval(run, DAY_MS)
-  timer.unref()
+export function startTelemetry(log?: { warn: (message: string) => void }) {
+  let timer: NodeJS.Timeout | undefined
+  const schedule = (delay: number) => {
+    timer = setTimeout(() => void run(), delay)
+    timer.unref()
+  }
+  const run = async () => {
+    const sent = await sendTelemetry()
+    if (!sent && await shouldSendTelemetry()) {
+      log?.warn("Anonymous telemetry heartbeat failed; retrying in one hour")
+      schedule(RETRY_MS)
+      return
+    }
+    schedule(DAY_MS)
+  }
+  void run()
 }

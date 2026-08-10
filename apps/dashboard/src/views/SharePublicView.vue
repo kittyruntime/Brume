@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { trpc } from '../lib/trpc'
+import LoadingState from '../components/ui/LoadingState.vue'
 
 const route = useRoute()
 const token = route.params.token as string
@@ -80,7 +81,7 @@ onMounted(async () => {
     <div class="w-full max-w-lg panel-card p-6 bg-[var(--c-surface)]">
       <p v-if="loadError && !loading" class="text-sm text-[var(--c-accent)] mb-3">{{ loadError }}</p>
 
-      <div v-if="loading" class="text-[var(--c-text-3)] text-sm">Loading…</div>
+      <LoadingState v-if="loading" compact />
 
       <!-- Unavailable states -->
       <div v-else-if="info && info.state !== 'ok'" class="text-center py-8">

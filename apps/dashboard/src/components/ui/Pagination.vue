@@ -21,6 +21,7 @@ function goPage(n: number) {
       <button
         @click="goPage(page - 1)"
         :disabled="page === 1"
+        aria-label="Previous page"
         class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -41,6 +42,7 @@ function goPage(n: number) {
       <button
         @click="goPage(page + 1)"
         :disabled="page === pageCount"
+        aria-label="Next page"
         class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

@@ -84,7 +84,7 @@ async function save() {
 </script>
 
 <template>
-  <Modal panel-class="w-[420px]" @close="emit('close')">
+  <Modal panel-class="w-full max-w-[420px]" @close="emit('close')">
     <template #header>
       <div>
         <div class="text-sm font-medium text-[var(--c-text-1)] truncate">{{ path.split('/').pop() }}</div>

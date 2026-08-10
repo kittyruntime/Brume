@@ -65,6 +65,7 @@ async function checkDefaultPassword() {
 const activeApp        = ref<string>('dashboard')
 const notifMenuOpen    = ref(false)
 const userMenuOpen     = ref(false)
+const moreMenuOpen     = ref(false)
 const settingsSection  = ref<'profile' | 'users' | 'places' | 'groups' | null>(null)
 const appsPanelRef     = ref<InstanceType<typeof AppsPanelT> | null>(null)
 
@@ -95,10 +96,18 @@ function selectApp(id: string) {
   activeApp.value = id
   userMenuOpen.value = false
   notifMenuOpen.value = false
+  moreMenuOpen.value = false
 }
 
 // Data-driven, user-orderable sidebar / mobile nav (order persisted per-browser).
 const { items: navItems } = useSidebarNav(() => isAdmin.value, cap => hasCapability(cap).value)
+const mobilePrimaryItems = computed(() => {
+  const primary = navItems.value.slice(0, 4)
+  const active = navItems.value.find(item => item.id === activeApp.value)
+  if (active && !primary.some(item => item.id === active.id)) primary.splice(3, 1, active)
+  return primary
+})
+const mobileMoreItems = computed(() => navItems.value.filter(item => !mobilePrimaryItems.value.some(primary => primary.id === item.id)))
 
 // Native drag-and-drop reorder (desktop sidebar only). Operates on the full
 // ordered id list so hidden admin items keep their relative position.
@@ -167,6 +176,7 @@ function toggleNotifMenu() {
   }
   notifMenuOpen.value = !notifMenuOpen.value
   userMenuOpen.value = false
+  moreMenuOpen.value = false
 }
 
 function toggleUserMenu() {
@@ -180,6 +190,7 @@ function toggleUserMenu() {
   }
   userMenuOpen.value = !userMenuOpen.value
   notifMenuOpen.value = false
+  moreMenuOpen.value = false
 }
 
 function goToProfile() {
@@ -442,7 +453,7 @@ onUnmounted(() => {
              multi-root) cross-fades on app switch, like routes do. -->
         <div :class="['min-w-0 flex-1', activeApp !== 'dashboard' ? 'overflow-hidden' : 'overflow-auto']">
           <Transition name="ui-fade" mode="out-in">
-          <div :key="activeApp" class="h-full route-fade">
+          <div :key="activeApp" class="mobile-density h-full route-fade">
           <DashboardPanel v-if="activeApp === 'dashboard'" class="h-full" />
           <FileBrowserPanel v-else-if="activeApp === 'files'" class="h-full" />
           <AppsPanel v-else-if="activeApp === 'apps'" ref="appsPanelRef" class="h-full" />
@@ -469,10 +480,10 @@ onUnmounted(() => {
     <nav class="flex sm:hidden w-full flex-shrink-0 items-center h-14 overflow-hidden bg-[var(--c-sidebar)] border-t border-[var(--c-border)] px-1 pb-[env(safe-area-inset-bottom)]">
 
       <!-- App nav (order mirrors the sidebar; not draggable on mobile) -->
-      <div v-for="item in navItems" :key="item.id" class="relative flex min-w-0 flex-1 justify-center">
+      <div v-for="item in mobilePrimaryItems" :key="item.id" class="relative flex min-w-0 flex-1 justify-center">
         <span v-if="isActive(item.id)"
           class="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-0.5 bg-[var(--c-accent)] rounded-t-full" />
-        <button @click="selectApp(item.id)" :title="item.label"
+        <button @click="selectApp(item.id)" :title="item.label" :aria-label="item.label"
           :class="['relative h-11 w-full max-w-11 rounded-xl flex items-center justify-center transition-all duration-150',
             isActive(item.id) ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]']">
           <SidebarNavIcon :id="item.id" />
@@ -483,8 +494,14 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <button v-if="mobileMoreItems.length" @click.stop="moreMenuOpen = !moreMenuOpen" title="More apps" aria-label="More apps"
+        :aria-expanded="moreMenuOpen" class="relative flex h-11 min-w-0 flex-1 items-center justify-center rounded-xl text-[var(--c-text-3)]">
+        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+      </button>
+
       <!-- Notifications bell -->
       <button @click.stop="toggleNotifMenu" title="Activity"
+        aria-label="Activity"
         :class="['relative h-11 min-w-0 flex-1 rounded-xl flex items-center justify-center transition-all duration-150',
           notifMenuOpen ? 'text-[var(--c-accent)]' : 'text-[var(--c-text-3)]']">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -497,12 +514,25 @@ onUnmounted(() => {
 
       <!-- User avatar -->
       <button @click.stop="toggleUserMenu" title="Account"
+        aria-label="Account"
         class="flex h-11 min-w-0 flex-1 items-center justify-center text-xs font-bold select-none">
         <span class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--c-accent)] text-[var(--c-accent-fg)] transition-all duration-150"
           :class="userMenuOpen ? 'ring-2 ring-[var(--c-accent)] ring-offset-2 ring-offset-[var(--c-sidebar)]' : 'opacity-80'">{{ initials }}</span>
       </button>
 
     </nav>
+
+    <Teleport to="body">
+      <template v-if="moreMenuOpen">
+        <button class="fixed inset-0 z-40 bg-black/30 sm:hidden" aria-label="Close app menu" @click="moreMenuOpen=false" />
+        <div class="fixed inset-x-3 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-50 grid grid-cols-2 gap-1 rounded-2xl border border-[var(--c-border-strong)] bg-[var(--c-surface)] p-2 shadow-[var(--shadow-md)] sm:hidden">
+          <button v-for="item in mobileMoreItems" :key="item.id" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-[var(--c-text-2)] active:bg-[var(--c-hover)]" @click="selectApp(item.id)">
+            <SidebarNavIcon :id="item.id" class="shrink-0" />
+            <span class="truncate">{{ item.label }}</span>
+          </button>
+        </div>
+      </template>
+    </Teleport>
 
   </div>
 

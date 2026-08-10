@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { trpc } from '../../lib/trpc'
+import LoadingState from '../ui/LoadingState.vue'
+import EmptyState from '../ui/EmptyState.vue'
 
 type Connection = { user: string; share: string; client: string; connectedAt: string }
 
@@ -39,13 +41,13 @@ onUnmounted(() => {
 
     <p v-if="error" class="status-text text-[var(--c-danger)] mb-4">[ERR] {{ error }}</p>
 
-    <div v-if="loading" class="text-sm text-[var(--c-text-3)]">Loading…</div>
+    <LoadingState v-if="loading" compact />
 
-    <div v-else-if="connections.length === 0" class="panel-card bg-[var(--c-surface)] p-6 text-sm text-[var(--c-text-3)]">
-      No active SMB connections.
-    </div>
+    <div v-else-if="connections.length === 0" class="panel-card bg-[var(--c-surface)] p-4"><EmptyState message="No active SMB connections." description="New SMB sessions will appear here automatically." /></div>
 
     <div v-else class="panel-card bg-[var(--c-surface)]">
+      <div class="divide-y divide-[var(--c-border)] sm:hidden"><article v-for="(c,i) in connections" :key="i" class="space-y-2 p-4"><div class="flex items-center justify-between gap-2"><strong class="truncate text-sm text-[var(--c-text-1)]">{{c.user||'guest'}}</strong><span class="badge badge-muted">{{c.share}}</span></div><dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs"><dt class="text-[var(--c-text-3)]">Client</dt><dd class="truncate font-mono text-[var(--c-text-2)]" :title="c.client">{{c.client}}</dd><dt class="text-[var(--c-text-3)]">Connected</dt><dd class="font-mono text-[var(--c-text-2)]">{{c.connectedAt}}</dd></dl></article></div>
+      <div class="hidden sm:block">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-[var(--c-border)]">
@@ -68,6 +70,7 @@ onUnmounted(() => {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </template>

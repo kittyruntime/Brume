@@ -7,15 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Mobile-first frontend pass**: crowded navigation now keeps four primary apps and moves the rest
+  into an accessible More menu; audit entries, users, containers, Docker networks/volumes, SMB
+  connections and mounts become cards instead of horizontally scrolling tables on phones.
+- **Accessible dialogs and feedback**: dialogs behave as bottom sheets on mobile, trap keyboard
+  focus, restore focus when closed and expose dialog semantics. Shared loading, error and empty
+  states, clearer focus rings, touch feedback, accessible icon labels and live toast announcements
+  make async operations more consistent across the interface.
+- **Data backup controls**: rsync plans can now be edited, paused and re-enabled from Settings, with
+  clearer execution-state badges and responsive action layouts.
+- **Frontend polish**: form controls have clearer focus feedback, keyboard focus is consistent, and
+  mobile cards, headers and action groups have more balanced spacing and touch-friendly layouts.
+
 ### Fixed
+- **Reliable telemetry delivery**: a heartbeat that fails while network or DNS is still coming up
+  now retries after one hour instead of silently waiting a full day. The HTTPS timeout is increased
+  to ten seconds, failures are logged without payload data, and this release forces one corrective
+  heartbeat from existing installations.
 - **Mobile layout overflow**: the bottom navigation now shares the available viewport width instead
   of extending the page, wide dashboard widgets collapse to one column on phones, and settings,
   storage, monitoring, sharing, App Store, audit and backup screens use responsive spacing and
   wrapping. The shell now follows the dynamic mobile viewport and respects safe-area insets.
-
-### Changed
-- **Frontend polish**: form controls have clearer focus feedback, keyboard focus is consistent, and
-  mobile cards, headers and action groups have more balanced spacing and touch-friendly layouts.
 
 ## [1.47.0] - 2026-08-10
 

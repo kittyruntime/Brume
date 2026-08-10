@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { trpc } from '../lib/trpc'
+import LoadingState from './ui/LoadingState.vue'
 
 type Place = { id: string; name: string; path: string }
 type Group = { id: string; name: string }
@@ -138,7 +139,7 @@ onMounted(async () => {
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="text-[var(--c-text-3)] text-sm px-1">Loading…</div>
+    <LoadingState v-if="loading" compact />
 
     <template v-else>
       <!-- Add form -->

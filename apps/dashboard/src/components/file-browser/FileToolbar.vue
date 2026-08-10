@@ -54,7 +54,7 @@ function clearSearch() {
     @click.stop
   >
     <!-- Mobile: places sidebar toggle -->
-    <button @click="emit('toggleSidebar')" title="Places"
+    <button @click="emit('toggleSidebar')" title="Places" aria-label="Toggle places sidebar"
       class="sm:hidden p-1.5 rounded-lg flex-shrink-0 transition-colors"
       :class="sidebarOpen ? 'text-[var(--c-accent)] bg-[var(--c-accent-subtle)]' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)]'">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -63,7 +63,7 @@ function clearSearch() {
     </button>
 
     <!-- Back / Up -->
-    <button v-if="canGoUp" @click="emit('goUp')" title="Go up"
+    <button v-if="canGoUp" @click="emit('goUp')" title="Go up" aria-label="Go to parent folder"
       class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors flex-shrink-0">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
@@ -89,7 +89,7 @@ function clearSearch() {
       <!-- Selection actions -->
       <template v-if="selectedCount > 0">
         <span class="text-xs tabular-nums text-[var(--c-text-3)] select-none pl-1 pr-0.5">{{ selectedCount }} sel.</span>
-        <button @click="emit('clearSelection')" title="Clear selection"
+        <button @click="emit('clearSelection')" title="Clear selection" aria-label="Clear selection"
           class="p-1 rounded-sm text-[var(--c-text-3)] hover:text-[var(--c-text-2)] transition-colors">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -97,41 +97,41 @@ function clearSearch() {
         </button>
         <div class="w-px h-3.5 bg-[var(--c-border-strong)] mx-0.5 flex-shrink-0" />
 
-        <button @click="emit('copy')" title="Copy" class="sel-btn">
+        <button @click="emit('copy')" title="Copy" aria-label="Copy selection" class="sel-btn">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
           </svg>
         </button>
-        <button @click="emit('cut')" title="Cut" class="sel-btn">
+        <button @click="emit('cut')" title="Cut" aria-label="Cut selection" class="sel-btn">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"/>
           </svg>
         </button>
 
         <template v-if="selectedCount === 1">
-          <button @click="emit('startRename', selectedEntries[0]!)" title="Rename" class="sel-btn">
+          <button @click="emit('startRename', selectedEntries[0]!)" title="Rename" aria-label="Rename selection" class="sel-btn">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
             </svg>
           </button>
-          <button v-if="selectedEntries[0]?.type === 'file'" @click="emit('download')" title="Download" class="sel-btn">
+          <button v-if="selectedEntries[0]?.type === 'file'" @click="emit('download')" title="Download" aria-label="Download selection" class="sel-btn">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
             </svg>
           </button>
-          <button @click="emit('openPermissions')" title="Permissions" class="sel-btn">
+          <button @click="emit('openPermissions')" title="Permissions" aria-label="Edit permissions" class="sel-btn">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
             </svg>
           </button>
-          <button @click="emit('share')" title="Share" class="sel-btn">
+          <button @click="emit('share')" title="Share" aria-label="Share selection" class="sel-btn">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
               <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
             </svg>
           </button>
         </template>
 
-        <button @click="emit('delete')" title="Delete" class="sel-btn sel-btn-danger">
+        <button @click="emit('delete')" title="Delete" aria-label="Delete selection" class="sel-btn sel-btn-danger">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
           </svg>
@@ -140,7 +140,7 @@ function clearSearch() {
       </template>
 
       <!-- New Folder -->
-      <button v-if="currentPath" @click="emit('createFolder')" title="New Folder"
+      <button v-if="currentPath" @click="emit('createFolder')" title="New Folder" aria-label="Create folder"
         class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors text-xs">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
@@ -149,7 +149,7 @@ function clearSearch() {
       </button>
 
       <!-- New File -->
-      <button v-if="currentPath" @click="emit('createFile')" title="New File"
+      <button v-if="currentPath" @click="emit('createFile')" title="New File" aria-label="Create file"
         class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors text-xs">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -158,7 +158,7 @@ function clearSearch() {
       </button>
 
       <!-- Upload -->
-      <button v-if="currentPath" @click="emit('uploadClick')" title="Upload files"
+      <button v-if="currentPath" @click="emit('uploadClick')" title="Upload files" aria-label="Upload files"
         class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors text-xs">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
@@ -167,7 +167,7 @@ function clearSearch() {
       </button>
 
       <!-- Paste -->
-      <button v-if="clipboard && currentPath" @click.stop="emit('paste')" title="Paste"
+      <button v-if="clipboard && currentPath" @click.stop="emit('paste')" title="Paste" aria-label="Paste files"
         :class="['flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors',
           clipboard.mode === 'cut'
             ? 'bg-[var(--c-warning)]/15 text-[var(--c-warning)] hover:bg-[var(--c-warning)]/25'
@@ -182,7 +182,7 @@ function clearSearch() {
       <div v-if="currentPath" class="w-px h-4 bg-[var(--c-border-strong)] mx-1" />
 
       <!-- Refresh -->
-      <button v-if="currentPath" @click="emit('refresh')" title="Refresh"
+      <button v-if="currentPath" @click="emit('refresh')" title="Refresh" aria-label="Refresh folder"
         class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -191,13 +191,13 @@ function clearSearch() {
 
       <!-- View toggle -->
       <div class="flex items-center gap-0.5 bg-[var(--c-surface-deep)] rounded-lg p-0.5">
-        <button @click="emit('update:viewMode', 'list')" title="List view"
+        <button @click="emit('update:viewMode', 'list')" title="List view" aria-label="List view"
           :class="['p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'bg-[var(--c-surface)] text-[var(--c-text-2)] shadow-sm' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]']">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
           </svg>
         </button>
-        <button @click="emit('update:viewMode', 'grid')" title="Grid view"
+        <button @click="emit('update:viewMode', 'grid')" title="Grid view" aria-label="Grid view"
           :class="['p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'bg-[var(--c-surface)] text-[var(--c-text-2)] shadow-sm' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-2)]']">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>

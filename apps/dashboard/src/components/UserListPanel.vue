@@ -8,6 +8,7 @@ import Pagination from './ui/Pagination.vue'
 import LoadingSpinner from './ui/LoadingSpinner.vue'
 import SortableHeader from './ui/SortableHeader.vue'
 import SearchInput from './ui/SearchInput.vue'
+import EmptyState from './ui/EmptyState.vue'
 import { usePagination } from '../lib/usePagination'
 
 type User = {
@@ -238,7 +239,8 @@ onMounted(load)
 
       <!-- Table -->
       <template v-else>
-        <div class="panel-card">
+        <div class="space-y-2 sm:hidden"><article v-for="user in paged" :key="user.id" class="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] p-3" @click="isUserManager&&openDetail(user)"><div class="flex items-center gap-3"><div :class="['grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br text-[11px] font-bold text-white',avatarGradient(user.username)]">{{user.username.slice(0,2).toUpperCase()}}</div><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-1.5"><strong class="truncate text-sm text-[var(--c-text-1)]">{{user.username}}</strong><span v-if="user.isAdmin" class="badge badge-admin">admin</span><span v-if="user.isUserManager" class="badge badge-violet">manager</span></div><p v-if="user.displayName" class="truncate text-xs text-[var(--c-text-3)]">{{user.displayName}}</p></div><span v-if="isUserManager" aria-hidden="true" class="text-[var(--c-text-3)]">›</span></div><div class="mt-2 flex flex-wrap gap-1"><span v-for="g in groups.filter(g=>g.members.some(m=>m.userId===user.id))" :key="g.id" class="badge badge-muted">{{g.name}}</span></div></article><EmptyState v-if="filteredUsers.length===0" :message="users.length===0?'No users yet.':'No users match your search.'" /></div>
+        <div class="panel-card hidden sm:block">
           <table class="w-full text-sm">
             <thead>
               <tr class="bg-[var(--c-surface-alt)] border-b border-[var(--c-border)]">

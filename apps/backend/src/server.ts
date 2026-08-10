@@ -11,7 +11,7 @@ const start = async () => {
     await connectNats()
     startMetricsSampler()
     startAlertSampler()
-    startTelemetry()
+    startTelemetry(app.log)
     startBackupScheduler()
     void startEventSubscriber(app.log).catch(err => {
       app.log.error(err, "nats: event subscriber fatal error")

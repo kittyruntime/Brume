@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { trpc } from '../lib/trpc'
+import LoadingState from './ui/LoadingState.vue'
+import ErrorState from './ui/ErrorState.vue'
+import EmptyState from './ui/EmptyState.vue'
 
 type AuditEntry = Awaited<ReturnType<typeof trpc.audit.list.query>>['entries'][number]
 
@@ -144,29 +147,24 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> | nu
     </div>
 
     <!-- Loading -->
-    <div v-if="loading && !entries.length" class="flex items-center justify-center py-16 text-[var(--c-text-3)] text-sm gap-2">
-      <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-      </svg>
-      Loading…
-    </div>
+    <LoadingState v-if="loading && !entries.length" />
 
     <!-- Error -->
-    <div v-else-if="error" class="flex flex-col items-center gap-3 py-16 text-center">
-      <div class="text-sm text-danger">{{ error }}</div>
-      <button @click="load" class="btn btn-outline btn-sm">
-        Retry
-      </button>
-    </div>
+    <ErrorState v-else-if="error" :message="error" retry-label="Retry" @retry="load" />
 
     <!-- Empty -->
-    <div v-else-if="!entries.length" class="text-center py-16 text-[var(--c-text-3)] text-sm">
-      No audit entries found.
-    </div>
+    <EmptyState v-else-if="!entries.length" message="No audit entries found." description="Try clearing the action filter." />
 
     <!-- Table -->
     <template v-else>
-      <div class="rounded-xl border border-[var(--c-border)] overflow-hidden">
+      <div class="space-y-2 sm:hidden">
+        <article v-for="entry in entries" :key="entry.id" class="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] p-3" @click="selectedEntry = selectedEntry?.id === entry.id ? null : entry">
+          <div class="flex items-start justify-between gap-3"><div class="min-w-0"><span :class="['inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-sm border', categoryClass[actionCategory(entry.action)]]">{{ actionLabel(entry.action) }}</span><p v-if="entry.target" class="mt-1.5 truncate font-mono text-xs text-[var(--c-text-2)]" :title="entry.target">{{ entry.target }}</p></div><span :class="entry.success ? 'text-success' : 'text-danger'" class="shrink-0 text-xs font-semibold">{{ entry.success ? 'OK' : 'Fail' }}</span></div>
+          <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--c-text-3)]"><span>{{ fmtDate(entry.createdAt) }}</span><span>{{ entry.user?.displayName || entry.user?.username || 'System' }}</span><span class="font-mono">{{ entry.ip ?? '—' }}</span></div>
+          <div v-if="selectedEntry?.id === entry.id" class="mt-3 border-t border-[var(--c-border)] pt-3"><p class="break-all font-mono text-[10px] text-[var(--c-text-3)]">{{ entry.action }}</p><pre v-if="parseMeta(entry.meta)" class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--c-surface-deep)] p-2 text-[10px] text-[var(--c-text-2)]">{{ JSON.stringify(parseMeta(entry.meta), null, 2) }}</pre></div>
+        </article>
+      </div>
+      <div class="hidden rounded-xl border border-[var(--c-border)] overflow-hidden sm:block">
         <table class="w-full text-sm border-collapse">
           <thead>
             <tr class="bg-[var(--c-surface-deep)] border-b border-[var(--c-border)] text-[var(--c-text-3)] text-xs uppercase tracking-wide">

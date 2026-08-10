@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { trpc } from '../lib/trpc'
+import LoadingState from './ui/LoadingState.vue'
+import EmptyState from './ui/EmptyState.vue'
 
 type Link = Awaited<ReturnType<typeof trpc.shareLink.listMine.query>>[number]
 const links = ref<Link[]>([])
@@ -33,10 +35,8 @@ onMounted(load)
       </p>
     </div>
 
-    <div v-if="loading" class="text-[var(--c-text-3)] text-sm">Loading…</div>
-    <div v-else-if="links.length === 0" class="rounded-xl border border-dashed border-[var(--c-border-strong)] px-6 py-8 text-center text-sm text-[var(--c-text-3)]">
-      No shared links yet.
-    </div>
+    <LoadingState v-if="loading" compact />
+    <div v-else-if="links.length === 0" class="rounded-xl border border-dashed border-[var(--c-border-strong)]"><EmptyState message="No shared links yet." description="Share a file or folder from the file browser to create one." /></div>
     <div v-else class="panel-card divide-y divide-[var(--c-border)]">
       <div v-for="l in links" :key="l.id" class="flex items-center gap-3 px-4 py-3">
         <div class="flex-1 min-w-0">

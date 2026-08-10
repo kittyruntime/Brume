@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { trpc } from '../lib/trpc'
 import { useStorageData, fmtBytes, isRaidHealthy } from '../composables/useStorageData'
 import type { BlockDev } from '../composables/useStorageData'
+import LoadingState from './ui/LoadingState.vue'
+import ErrorState from './ui/ErrorState.vue'
 
 const { devices, raids, lvmVGs, lvmLVs, loading: storageLoading } = useStorageData()
 
@@ -161,13 +163,8 @@ function relTime(d: string | Date): string {
     <h2 class="text-lg font-semibold text-[var(--c-text-1)] mb-1">Overview</h2>
     <p class="text-sm text-[var(--c-text-3)] mb-6">Dashboard summary for this NAS.</p>
 
-    <div v-if="isLoadingAll" class="flex items-center gap-2 text-[var(--c-text-3)] text-sm py-8">
-      <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-      </svg>
-      Loading…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger">{{ error }}</div>
+    <LoadingState v-if="isLoadingAll" compact />
+    <ErrorState v-else-if="error" :message="error" compact />
 
     <template v-else>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

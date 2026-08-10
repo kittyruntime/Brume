@@ -7,6 +7,8 @@ import {
 } from 'chart.js'
 import { trpc } from '../lib/trpc'
 import LoadingSpinner from './ui/LoadingSpinner.vue'
+import LoadingState from './ui/LoadingState.vue'
+import ErrorState from './ui/ErrorState.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
 
@@ -361,13 +363,8 @@ const chartOptions = {
         </button>
       </div>
 
-      <div v-if="historyLoading" class="flex justify-center py-12 text-[var(--c-text-3)] text-sm">Loading…</div>
-      <div v-else-if="historyError" class="flex flex-col items-center gap-3 py-12 text-center">
-        <div class="text-sm text-danger">{{ historyError }}</div>
-        <button @click="loadHistory" class="btn btn-outline btn-sm">
-          Retry
-        </button>
-      </div>
+      <LoadingState v-if="historyLoading" />
+      <ErrorState v-else-if="historyError" :message="historyError" retry-label="Retry" @retry="loadHistory" />
       <div v-else-if="!historyData.length" class="text-center py-12 text-sm text-[var(--c-text-3)]">
         No data yet — history is recorded every minute.
       </div>

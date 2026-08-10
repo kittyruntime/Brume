@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useNotifications } from '../lib/notifications'
+import LoadingSpinner from './ui/LoadingSpinner.vue'
 
 defineProps<{ open: boolean; pos: { bottom: number; left: number } }>()
 defineEmits<{ close: [] }>()
@@ -27,7 +28,7 @@ const hasDismissible = computed(
         <!-- Header -->
         <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--c-border)] shrink-0">
           <span class="text-xs font-semibold text-[var(--c-text-2)] uppercase tracking-wider">Activity</span>
-          <button @click="$emit('close')" class="p-1 rounded-sm text-[var(--c-text-3)] hover:text-[var(--c-text-1)] transition-colors">
+          <button @click="$emit('close')" aria-label="Close activity panel" class="p-1 rounded-sm text-[var(--c-text-3)] hover:text-[var(--c-text-1)] transition-colors">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -51,10 +52,7 @@ const hasDismissible = computed(
                       : n.type === 'info'    ? 'bg-[var(--c-accent-subtle)] text-[var(--c-accent)]'
                       :                        'bg-[var(--c-surface-deep)] text-[var(--c-text-3)]'">
                 <!-- Spinner for progress -->
-                <svg v-if="n.type === 'progress'" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
+                <LoadingSpinner v-if="n.type === 'progress'" label="" class="text-current" />
                 <svg v-else-if="n.type === 'success'" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                 </svg>
@@ -78,7 +76,7 @@ const hasDismissible = computed(
               </div>
 
               <!-- Dismiss -->
-              <button v-if="n.type !== 'progress'" @click="dismiss(n.id)"
+              <button v-if="n.type !== 'progress'" @click="dismiss(n.id)" aria-label="Dismiss activity"
                 class="shrink-0 p-1 rounded-sm text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors">
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>

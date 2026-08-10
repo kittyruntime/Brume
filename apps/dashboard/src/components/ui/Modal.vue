@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useEscLayer } from '../../lib/escLayer'
 import { modalHostKey } from '../../lib/modal-host'
 
@@ -22,12 +22,32 @@ const emit = defineEmits<{ close: [] }>()
 /* Owns enter/leave animation: parents keep using v-if + @close, but the
    leave transition must finish before the parent is told to unmount us. */
 const visible = ref(true)
+const panel = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
 function requestClose() {
   if (props.preventClose) return
   visible.value = false
 }
 
 useEscLayer(requestClose)
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || !panel.value) return
+  const focusable = [...panel.value.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+  if (!focusable.length) { event.preventDefault(); panel.value.focus(); return }
+  const first = focusable[0]!, last = focusable[focusable.length - 1]!
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+}
+
+onMounted(() => {
+  previouslyFocused = document.activeElement as HTMLElement | null
+  void nextTick(() => {
+    const target = panel.value?.querySelector<HTMLElement>('[autofocus], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [href]')
+    ;(target ?? panel.value)?.focus()
+  })
+})
+onUnmounted(() => previouslyFocused?.focus())
 
 /* Inside a desktop window the modal stays within the window frame. */
 const host = inject(modalHostKey, null)
@@ -43,14 +63,14 @@ defineExpose({ requestClose })
     <Transition name="ui-fade" appear @after-leave="emit('close')">
       <div
         v-if="visible"
-        :class="[host ? 'absolute' : 'fixed', 'inset-0 z-50 bg-black/80 flex items-center justify-center p-4']"
+        :class="[host ? 'absolute items-center justify-center p-4' : 'fixed items-end justify-center p-0 sm:items-center sm:p-4', 'inset-0 z-50 bg-black/80 flex']"
         @click.self="closeOnBackdrop && requestClose()"
       >
         <Transition name="ui-pop" appear>
           <!-- v-if mirrors the backdrop's so the panel plays its own leave pop
                (unmounting via the parent alone would skip it). -->
           <!-- max-h is a % so it tracks the host (window body or viewport). -->
-          <div v-if="visible" :class="['bg-[var(--c-surface)] border border-[var(--c-border-strong)] rounded-xl shadow-[var(--shadow-md)] flex flex-col max-h-[90%]', panelClass]">
+          <div ref="panel" v-if="visible" role="dialog" aria-modal="true" tabindex="-1" @keydown="onKeydown" :class="['bg-[var(--c-surface)] border border-[var(--c-border-strong)] rounded-t-2xl sm:rounded-xl shadow-[var(--shadow-md)] flex flex-col max-h-[92dvh] sm:max-h-[90%] outline-none', panelClass]">
             <div v-if="$slots.header || showClose" class="flex items-center justify-between gap-3 px-6 py-4 border-b border-[var(--c-border)] shrink-0">
               <div class="flex-1 min-w-0 flex items-center justify-between gap-3">
                 <slot name="header" />
@@ -59,6 +79,7 @@ defineExpose({ requestClose })
                 v-if="showClose"
                 @click="requestClose"
                 title="Close"
+                aria-label="Close dialog"
                 class="p-1 rounded-md text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors shrink-0"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -76,7 +97,7 @@ defineExpose({ requestClose })
               <slot />
             </div>
 
-            <div v-if="$slots.footer" class="px-6 py-4 border-t border-[var(--c-border)] flex items-center gap-2 shrink-0">
+            <div v-if="$slots.footer" class="px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-[var(--c-border)] flex flex-wrap items-center gap-2 shrink-0">
               <slot name="footer" />
             </div>
           </div>
