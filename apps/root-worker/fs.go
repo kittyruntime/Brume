@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -861,12 +862,13 @@ type diskInfo struct {
 }
 
 type raidArray struct {
-	Name    string   `json:"name"`
-	Level   string   `json:"level"`
-	State   string   `json:"state"`
-	Devices []string `json:"devices"`
-	Active  int      `json:"active"`
-	Total   int      `json:"total"`
+	Name          string   `json:"name"`
+	Level         string   `json:"level"`
+	State         string   `json:"state"`
+	Devices       []string `json:"devices"`
+	Active        int      `json:"active"`
+	Total         int      `json:"total"`
+	ResyncPercent *float64 `json:"resyncPercent,omitempty"`
 }
 
 type disksResult struct {
@@ -943,6 +945,8 @@ func doListDisks() (*disksResult, *fsError) {
 	return &disksResult{Disks: disks, Raids: raids}, nil
 }
 
+var reResyncPct = regexp.MustCompile(`=\s*([\d.]+)%`)
+
 func parseMdstat(content string) []raidArray {
 	lines := strings.Split(content, "\n")
 	var raids []raidArray
@@ -983,28 +987,42 @@ func parseMdstat(content string) []raidArray {
 		}
 
 		active, total := 0, 0
-		// Next line: "   NNNNN blocks ... [T/A] [UU_...]"
-		for j := i + 1; j < len(lines) && j <= i+3; j++ {
+		var resyncPercent *float64
+		// Status line: "   NNNNN blocks ... [T/A] [UU_...]"; while rebuilding, an
+		// extra progress line follows: "[===>....] recovery = 45.2% (...) ..."
+		for j := i + 1; j < len(lines) && j <= i+4; j++ {
 			next := lines[j]
-			if start := strings.Index(next, "["); start >= 0 {
-				if end := strings.Index(next[start:], "]"); end >= 0 {
-					parts := strings.SplitN(next[start+1:start+end], "/", 2)
-					if len(parts) == 2 {
-						total, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-						active, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
+			if active == 0 && total == 0 {
+				if start := strings.Index(next, "["); start >= 0 {
+					if end := strings.Index(next[start:], "]"); end >= 0 {
+						parts := strings.SplitN(next[start+1:start+end], "/", 2)
+						if len(parts) == 2 {
+							t, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+							a, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+							if err1 == nil && err2 == nil {
+								total, active = t, a
+							}
+						}
 					}
-					break
+				}
+			}
+			if strings.Contains(next, "resync =") || strings.Contains(next, "recovery =") {
+				if m := reResyncPct.FindStringSubmatch(next); m != nil {
+					if pct, err := strconv.ParseFloat(m[1], 64); err == nil {
+						resyncPercent = &pct
+					}
 				}
 			}
 		}
 
 		raids = append(raids, raidArray{
-			Name:    name,
-			Level:   level,
-			State:   state,
-			Devices: devs,
-			Active:  active,
-			Total:   total,
+			Name:          name,
+			Level:         level,
+			State:         state,
+			Devices:       devs,
+			Active:        active,
+			Total:         total,
+			ResyncPercent: resyncPercent,
 		})
 	}
 
