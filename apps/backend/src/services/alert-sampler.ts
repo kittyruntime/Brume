@@ -2,7 +2,8 @@ import { prisma } from "@app/database"
 import { requestSync } from "../nats"
 
 type CheckResult = { target: string; message: string }
-type Checker = { source: string; check: () => Promise<CheckResult[]> }
+type CheckOutcome = { found: CheckResult[]; checked: string[] }
+type Checker = { source: string; check: () => Promise<CheckOutcome> }
 
 type RaidArray = {
   name: string
@@ -13,14 +14,16 @@ type RaidArray = {
   total: number
 }
 
-async function checkRaid(): Promise<CheckResult[]> {
+async function checkRaid(): Promise<CheckOutcome> {
   const res = await requestSync<{ raids: RaidArray[] }>("root.sys.blockdevices", {}, 15_000)
-  return res.raids
+  const checked = res.raids.map(r => r.name)
+  const found = res.raids
     .filter(r => !((r.state === "active" || r.state === "clean") && r.active === r.total))
     .map(r => ({
       target: r.name,
       message: `${r.active}/${r.total} devices active (${r.state})`,
     }))
+  return { found, checked }
 }
 
 type BlockDevLite = { name: string; type: string }
@@ -45,23 +48,26 @@ function deriveSmartStatus(s: SmartResult): "passed" | "warning" | "failed" | "u
   return "passed"
 }
 
-async function checkSmart(): Promise<CheckResult[]> {
+async function checkSmart(): Promise<CheckOutcome> {
   const { devices } = await requestSync<{ devices: BlockDevLite[] }>("root.sys.blockdevices", {}, 15_000)
   const disks = devices.filter(d => d.type === "disk")
-  const results: CheckResult[] = []
+  const found: CheckResult[] = []
+  const checked: string[] = []
   for (const d of disks) {
     let smart: SmartResult
     try {
       smart = await requestSync<SmartResult>("root.sys.smart", { device: d.name, noWake: true }, 15_000)
     } catch {
-      continue // unreadable SMART data for this disk — skip, not an alert condition on its own
+      continue // unreadable this tick — not checked, leave any existing alert alone
     }
+    if (!smart.available) continue // skipped (e.g. disk in standby) — not checked this tick, leave any existing alert alone
+    checked.push(d.name)
     const status = deriveSmartStatus(smart)
     if (status === "warning" || status === "failed") {
-      results.push({ target: d.name, message: `SMART status: ${status}` })
+      found.push({ target: d.name, message: `SMART status: ${status}` })
     }
   }
-  return results
+  return { found, checked }
 }
 
 const checkers: Checker[] = [
@@ -71,16 +77,20 @@ const checkers: Checker[] = [
 
 async function runChecks(): Promise<void> {
   for (const { source, check } of checkers) {
-    let found: CheckResult[] | null
+    let outcome: CheckOutcome | null
     try {
-      found = await check()
+      outcome = await check()
     } catch {
-      found = null // transient failure — leave this source's existing alerts as-is
+      outcome = null // transient failure — leave this source's existing alerts as-is
     }
-    if (found === null) continue
+    if (outcome === null) continue
+    const { found, checked } = outcome
     try {
       const targets = found.map(f => f.target)
-      await prisma.alert.deleteMany({ where: { source, target: { notIn: targets } } })
+      // Only reconcile targets actually evaluated this tick — a target that
+      // was skipped (e.g. a disk in standby) keeps whatever alert it already
+      // had rather than having it wrongly cleared.
+      await prisma.alert.deleteMany({ where: { source, target: { in: checked, notIn: targets } } })
       for (const f of found) {
         await prisma.alert.upsert({
           where: { source_target: { source, target: f.target } },
