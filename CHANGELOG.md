@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.48.0] - 2026-08-10
+
 ### Changed
 - **Mobile-first frontend pass**: crowded navigation now keeps four primary apps and moves the rest
   into an accessible More menu; audit entries, users, containers, Docker networks/volumes, SMB
@@ -722,7 +724,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.47.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.0...HEAD
+[1.48.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.47.0...v1.48.0
 [1.47.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.46.0...v1.47.0
 [1.46.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...v1.46.0
 [1.45.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.44.1...v1.45.0
