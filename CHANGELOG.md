@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   LVM/partition management (a new "Storage admin" toggle on the user's account panel) without
   making them a full administrator. Revoking it takes effect on the account's very next request.
 
+### Security
+- **Storage safety hardening**: formatting a disk or wiping/deleting a partition now refuses if
+  the device is a live RAID member or LVM physical volume, closing a path that could silently
+  corrupt an array or volume group. Removing an LVM volume group now also refuses if any of its
+  logical volumes are still mounted. Mount options are validated more strictly to prevent
+  malformed `/etc/fstab` entries.
+
 ## [1.41.0] - 2026-08-06
 
 ### Added
