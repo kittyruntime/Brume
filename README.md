@@ -4,7 +4,18 @@
 > **Early stage software.** This project is under active development and has not been audited for security. It may contain vulnerabilities, incomplete features, or breaking changes without notice. Use at your own risk, preferably on an isolated network.
 > Tested on **Ubuntu 24.04** only. Other distributions are not officially supported.
 
-A modern home server dashboard for self-hosting apps, media and storage.
+[![Latest release](https://img.shields.io/github/v/release/kittyruntime/home-server-interface)](https://github.com/kittyruntime/home-server-interface/releases/latest)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux%20x86--64-fcc624?logo=linux&logoColor=black)](#requirements)
+
+**Home Server Interface (HSI)** is an open-source control panel for managing a home server or NAS
+from one modern web interface. Browse and share files, deploy self-hosted apps, operate Docker,
+manage disks and RAID, monitor hardware, control users, and automate encrypted or rsync backups.
+
+HSI combines a responsive dashboard with an optional windowed desktop experience. It is designed
+for a single Linux server and keeps privileged operations behind a dedicated, isolated worker.
+
+[Install](#install) · [Features](#features) · [Documentation](#documentation) · [Releases](https://github.com/kittyruntime/home-server-interface/releases)
 
 ---
 
@@ -22,71 +33,76 @@ A modern home server dashboard for self-hosting apps, media and storage.
 
 ## Features
 
-### Two ways to work
-- **Classic layout** — a fixed sidebar with one panel at a time; ideal on mobile.
-- **Desktop mode** — a windowed desktop with a dock, launchpad, draggable/resizable app windows and a customizable wallpaper. Toggle it from the account menu.
+### A complete home-server workspace
 
-### Overview
-The home panel surfaces live system metrics at a glance: CPU, memory, disk usage, container status and recent activity.
+- **Responsive dashboard** with CPU, memory, storage, system, container and disk-health widgets.
+- **Classic and desktop layouts**: use a mobile-friendly sidebar or a windowed desktop with a dock,
+  launchpad, movable windows, wallpaper, light/dark themes and a custom accent colour.
+- **Account-synced preferences** for themes and reorderable navigation.
 
-### File browser
-- Navigate folders, rename, move, copy, delete files and directories
-- Drag-and-drop or picker upload with chunked transfer and live **MB/s throughput** display
-- Pause, resume or cancel uploads mid-flight
-- Click the throughput badge to switch to chunk count display
-- One-click download
+### Reliable file management and sharing
 
-### Apps (containers)
-- List, inspect, start, stop and restart containers
-- Create containers with a full form: basic settings, port mappings, environment variables, volume mounts, networks, labels and advanced options
-- Import a **compose YAML** to prefill the form automatically
-- Manage container networks and volumes
+- Browse, search, create, rename, move, copy, delete, download and edit files from the browser.
+- Resumable chunked uploads with SHA-256 integrity checks, pause/resume/cancel controls, live speed,
+  retry support and protection against insufficient disk space.
+- Built-in code editor with syntax highlighting and formatting for common web and data formats.
+- **Places** map friendly names to server paths, with per-user and per-group Read, Write, Delete and
+  Share permissions.
+- Expiring public file/folder links, including guarded ZIP downloads for complete folders.
+- Optional **SMB/Samba sharing** with guest/read-only policies, live connections, password sync and
+  diagnostics that explain access problems.
 
-### Storage (admin)
-Dedicated app to manage the machine's block storage:
-- **Disks** — list physical disks and partitions, view S.M.A.R.T. health, format, create/delete partition tables
-- **RAID** — assemble and destroy `mdadm` arrays, monitor sync state
-- **LVM** — create physical volumes, volume groups and logical volumes
-- **Mounts** — mount/unmount devices, with optional persistent `/etc/fstab` entries
+### Docker and self-hosted applications
 
-### Monitor (admin)
-Live and historical system metrics (CPU %, RAM, network — 1h/6h/24h/7d), system information, and a filterable **audit log** of every privileged action.
+- Inspect, create, edit, start, stop and restart containers; view logs and manage ports, environment
+  variables, mounts, networks, labels and advanced settings.
+- Import Compose YAML to prefill a container configuration.
+- Curated **App Store** with guided installation for popular self-hosted applications, pinned image
+  versions, generated secrets, real application icons and live install/runtime state.
+- Host-port conflict warnings and per-port public URL/HTTPS metadata.
 
-### Configuration backup (admin)
-Export or restore a transactionally consistent copy of the HSI configuration from Settings →
-Backup & restore. The database is encrypted before download with AES-256-GCM and a
-password-derived key. Before restoration HSI verifies the authenticated encryption, SQLite
-integrity and schema compatibility, then retains the previous database as a local rollback copy.
-Configuration backups include accounts, permissions, shares, application definitions and settings,
-but not files stored in Places or Docker volume contents.
+### Storage and hardware operations
 
-### Data backups with rsync (admin)
-Create manual, hourly, daily or weekly plans from Settings → Data backups. HSI can copy a NAS
-folder to a local or SSH destination, or pull a remote folder onto the NAS. Plans support exclusion
-patterns, compression, bandwidth limiting and an explicitly enabled mirror mode. Remote transfers
-use an existing SSH key (mode 0600 or stricter) and strict `known_hosts` verification; passwords are
-never stored. `rsync` and the OpenSSH client must be installed on the server.
+- Discover disks and partitions, inspect S.M.A.R.T. health, format disks and manage partition tables.
+- Create and stop `mdadm` RAID arrays with rebuild progress and degraded-array alerts.
+- Manage LVM physical volumes, volume groups and logical volumes.
+- Mount and unmount filesystems, optionally persisting safe entries in `/etc/fstab`.
+- Safety checks prevent destructive operations on active RAID members, LVM volumes and mounted data.
 
-### Network sharing (admin)
-Share any Place over SMB via Samba, managed from the **Sharing** app: per-place read-only/guest options, live connections view, and NAS-style password sync across web, Linux and Samba accounts. Requires `samba` on the host.
+### Monitoring, alerts and lifecycle controls
 
-### Places
-Administrators define **Places** — named mount points that map a server path to a share visible in the browser. Users only see the shares they have access to.
+- Live and historical CPU, RAM and network metrics over 1 hour, 6 hours, 24 hours or 7 days.
+- System details, storage widgets and a filterable audit trail for privileged actions.
+- Background RAID and S.M.A.R.T. alerts, visible without opening the Storage app.
+- Check and apply HSI updates, restart the application, or reboot the host with confirmation and a
+  reconnect timeline.
+- Optional anonymous daily telemetry for aggregate hardware/version insights. It excludes hostnames,
+  network addresses, serial numbers, paths and user data, and can be disabled with
+  `HSI_TELEMETRY_ENABLED=false`.
 
-### Users & roles
-- Create users with individual Linux account mapping for filesystem-level permission enforcement
-- Define roles via a **permission matrix** covering Users, Places, Files, Containers and System categories
-- Assign users to roles; manage membership directly from the role editor
-- Administrators always bypass permission checks
+### Two layers of backup
 
-### Async operations
-Heavy operations (copy, move, assemble large uploads) run as background jobs executed by a privileged worker process. The UI polls for completion and notifies you when done — no browser tab needs to stay open.
+1. **HSI configuration backup and restore** — export a transactionally consistent database encrypted
+   with AES-256-GCM and a password-derived key. Restore verifies encryption, SQLite integrity and
+   schema compatibility, retains the previous database as a rollback copy, then restarts HSI.
+2. **Scheduled rsync data backups** — push NAS folders to local or SSH destinations, or pull remote
+   folders onto the NAS. Run plans manually, hourly, daily or weekly with exclusions, compression,
+   bandwidth limits, status history and an explicitly enabled mirror mode.
 
-### Privilege isolation
-The backend runs as an unprivileged user. A separate **root worker** process communicates over NATS JetStream and performs privileged operations (ownership-preserving copies, `chmod`, `chown`, user-impersonated writes, disk/RAID/LVM management, Samba config) in isolation. No `sudo` required at runtime.
+Remote backups use a pre-provisioned SSH key with strict host-key verification. HSI never stores SSH
+passwords and invokes `rsync` with validated arguments without passing commands through a shell.
 
-### Consistent, animated UI
-A token-based design system (semantic colors, radius scale, motion tokens with `prefers-reduced-motion` support) drives a coherent look in light and dark themes, with a user-selectable accent color.
+### Users, permissions and security boundaries
+
+- Linux-valid HSI accounts map consistently to filesystem and Samba identities.
+- Groups and a clear per-Place permission matrix replace opaque role expressions.
+- Separate Admin, User manager and Storage admin capabilities support least-privilege delegation.
+- Permission changes and account demotions take effect on the next request; login attempts are rate
+  limited and sensitive audit values are redacted.
+- The web backend runs unprivileged. A dedicated root worker receives typed jobs through NATS
+  JetStream and performs only validated filesystem, Docker, storage, sharing and host operations.
+- Long-running copies, uploads, archives and backups continue as background jobs independently of the
+  browser tab.
 
 ---
 
@@ -104,7 +120,8 @@ Developer and operator documentation lives in [`docs/`](docs/):
 ## Requirements
 
 - A Linux server (x86-64)
-- `curl`, `openssl`
+- `curl`, `openssl`, `rsync`, an OpenSSH client
+- Optional: Docker for containers and the App Store; Samba for SMB shares
 - Ports 80 (nginx, optional) and 9001 (backend) reachable from clients
 
 ---
@@ -140,7 +157,7 @@ curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/
 ### Pin a version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.39.0 bash
+curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.47.0 bash
 ```
 
 ---
@@ -162,7 +179,7 @@ journalctl -u hsi -f
 
 ## Build from source
 
-Requirements: Node.js ≥ 20, pnpm, Go ≥ 1.21, curl, openssl.
+Requirements: Node.js ≥ 20, pnpm, Go ≥ 1.21, curl, openssl, rsync and an OpenSSH client.
 
 ```bash
 git clone https://github.com/kittyruntime/home-server-interface
