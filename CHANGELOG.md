@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.48.1] - 2026-08-13
+
 ### Security
 - **Immediate REST privilege revocation**: file uploads, downloads, container logs and configuration
   backups now reload the account's current roles and existence from the database instead of trusting
@@ -753,7 +755,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.1...HEAD
+[1.48.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.0...v1.48.1
 [1.48.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.47.0...v1.48.0
 [1.47.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.46.0...v1.47.0
 [1.46.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.45.0...v1.46.0
