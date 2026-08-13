@@ -71,7 +71,17 @@ function chunkByteLength(file: File, index: number): number {
   return Math.min(CHUNK_SIZE, file.size - index * CHUNK_SIZE)
 }
 
-interface UploadStatus { known: boolean; staged: number[] }
+type UploadPhase = 'uploading' | 'staged' | 'finalizing' | 'completed' | 'failed' | 'cancelled'
+
+interface UploadStatus {
+  known: boolean
+  staged: number[]
+  totalChunks?: number
+  phase?: UploadPhase
+  jobId?: string
+  jobStatus?: string
+  jobError?: string | null
+}
 
 /** GET /files/upload/status — raw server view of what's already staged for `uploadId`. */
 async function fetchUploadStatus(uploadId: string): Promise<UploadStatus | null> {
@@ -92,6 +102,15 @@ async function fetchStagedChunks(uploadId: string): Promise<Set<number>> {
   // (the server treats an already-staged chunk as a harmless rewrite).
   const status = await fetchUploadStatus(uploadId)
   return status?.known ? new Set(status.staged) : new Set()
+}
+
+async function cancelUploadOnServer(uploadId: string): Promise<void> {
+  const resp = await fetch(`${BASE_URL}/files/upload/cancel`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploadId }),
+  })
+  if (!resp.ok) throw new Error(`Could not cancel upload (HTTP ${resp.status})`)
 }
 
 // Up to MAX_ATTEMPTS per chunk, backing off between them. Retries on network
@@ -255,11 +274,11 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
       // would skip all chunks and finalize a missing file. Drop the server
       // state so Retry restarts the upload from scratch.
       if (res.error && /checksum/i.test(res.error)) {
-        fetch(`${BASE_URL}/files/upload/cancel`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uploadId }),
-        }).catch(() => {})
+        await cancelUploadOnServer(uploadId).catch(() => {})
+        // Never reuse an id whose cleanup may still be queued. This also makes
+        // Retry independent from a lost cancellation response.
+        t.uploadId = randomId()
+        persistUpload(t)
       }
       throw new Error(finalizeErrorMessage(res.error))
     }
@@ -271,11 +290,7 @@ async function runUpload(t: Transfer, file: File, opts: UploadOpts): Promise<voi
     const isAbort = e instanceof DOMException && e.name === 'AbortError'
     if (isAbort) {
       uploads.setStatus(t.id, 'cancelled')
-      fetch(`${BASE_URL}/files/upload/cancel`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadId }),
-      }).catch(() => {})
+      void cancelUploadOnServer(uploadId).catch(() => {})
       clearPersisted(t.id)
       setTimeout(() => uploads.remove(t.id), 2500)
     } else {
@@ -328,6 +343,31 @@ export function resumeUpload(id: string, file: File, opts: UploadOpts = {}): voi
   void runUpload(t, file, opts)
 }
 
+async function monitorHydratedFinalization(id: string, jobId: string, totalBytes?: number): Promise<void> {
+  const deadline = 60_000 + Math.ceil((totalBytes ?? 0) / (10 * 1024 * 1024)) * 1000
+  const res = await pollJobResult(jobId, deadline)
+  const task = uploads.tasks.value.find(x => x.id === id) as Transfer | undefined
+  if (!task) return
+
+  if (res.status === 'completed') {
+    uploads.setStatus(id, 'done')
+    clearPersisted(id)
+    setTimeout(() => uploads.remove(id), 3000)
+    return
+  }
+
+  if (res.error && /checksum/i.test(res.error)) {
+    await cancelUploadOnServer(task.uploadId ?? task.id).catch(() => {})
+    task.uploadId = randomId()
+    persistUpload(task)
+  }
+  task.interrupted = true
+  const message = res.status === 'timeout'
+    ? 'Verification is still in progress — re-select the file to continue'
+    : `${finalizeErrorMessage(res.error)} — re-select the file to retry`
+  uploads.setStatus(id, 'error', message)
+}
+
 /**
  * Re-hydrate transfers for uploads that were mid-flight when the page was
  * reloaded (`localStorage`-persisted metadata, no in-memory `Transfer` — the
@@ -336,17 +376,16 @@ export function resumeUpload(id: string, file: File, opts: UploadOpts = {}): voi
  * already has staged:
  *   - unknown upload (staging GC'd, or it actually finished via another tab) →
  *     drop the stale bookmark, nothing to show.
- *   - known and incomplete → register an `interrupted` transfer so the tray
- *     shows "re-select to resume" instead of silently losing the progress.
- *   - known and already fully staged (finalize was still pending on reload) →
- *     leave the persisted entry alone; nothing to hydrate as interrupted,
- *     and `runUpload`/`clearPersisted` elsewhere will resolve it normally.
+ *   - known and incomplete/staged → register an `interrupted` transfer so the
+ *     user can re-select the file to resume or compute the final checksum;
+ *   - finalizing with a job id → restore the verifying row and its job poll;
+ *   - completed → remove the now-obsolete persistence bookmark.
  *
  * Call once on app/panel mount, before the user does anything.
  */
 export async function hydrateInterruptedUploads(): Promise<void> {
   for (const p of loadPersisted()) {
-    const uploadId = p.uploadId ?? p.id
+    let uploadId = p.uploadId ?? p.id
     const status = await fetchUploadStatus(uploadId)
 
     if (!status) continue // network hiccup — leave the bookmark, retry next reload
@@ -356,10 +395,15 @@ export async function hydrateInterruptedUploads(): Promise<void> {
       continue
     }
 
-    const totalChunks = p.totalChunks ?? 0
-    if (totalChunks > 0 && status.staged.length >= totalChunks) continue
-
     if (uploads.tasks.value.some(x => x.id === p.id)) continue // already registered
+
+    const totalChunks = status.totalChunks ?? p.totalChunks ?? 0
+    const fullyStaged = totalChunks > 0 && status.staged.length >= totalChunks
+    const phase = status.phase ?? (fullyStaged ? 'staged' : 'uploading')
+    if (phase === 'completed' || phase === 'cancelled') {
+      clearPersisted(p.id)
+      continue
+    }
 
     const sentChunks = status.staged.length
     // Exact staged byte count needs the File (last chunk may be short); this
@@ -367,6 +411,34 @@ export async function hydrateInterruptedUploads(): Promise<void> {
     const sentBytes = p.totalBytes !== undefined
       ? Math.min(p.totalBytes, sentChunks * CHUNK_SIZE)
       : undefined
+
+    if (phase === 'finalizing' && status.jobId) {
+      uploads.register({
+        id: p.id,
+        kind: 'upload',
+        name: p.name,
+        destDir: p.destDir,
+        status: 'verifying',
+        uploadId,
+        totalBytes: p.totalBytes,
+        totalChunks: totalChunks || p.totalChunks,
+        sentChunks,
+        sentBytes: fullyStaged ? p.totalBytes : sentBytes,
+      })
+      void monitorHydratedFinalization(p.id, status.jobId, p.totalBytes)
+      continue
+    }
+
+    if (phase === 'failed' && status.jobError && /checksum/i.test(status.jobError)) {
+      await cancelUploadOnServer(uploadId).catch(() => {})
+      uploadId = randomId()
+    }
+
+    const error = phase === 'staged' || phase === 'finalizing'
+      ? 'Upload staged — re-select the file to verify and finish'
+      : phase === 'failed'
+        ? `${finalizeErrorMessage(status.jobError ?? null)} — re-select the file to retry`
+        : 'Interrupted — re-select the file to resume'
 
     uploads.register({
       id: p.id,
@@ -377,11 +449,13 @@ export async function hydrateInterruptedUploads(): Promise<void> {
       interrupted: true,
       uploadId,
       totalBytes: p.totalBytes,
-      totalChunks: p.totalChunks,
+      totalChunks: totalChunks || p.totalChunks,
       sentChunks,
-      sentBytes,
-      error: 'Interrupted — re-select the file to resume',
+      sentBytes: fullyStaged ? p.totalBytes : sentBytes,
+      error,
     })
+    const task = uploads.tasks.value.find(x => x.id === p.id)
+    if (task && uploadId !== (p.uploadId ?? p.id)) persistUpload(task)
   }
 }
 

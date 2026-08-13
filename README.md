@@ -179,12 +179,12 @@ journalctl -u hsi -f
 
 ## Build from source
 
-Requirements: Node.js ≥ 20, pnpm, Go ≥ 1.21, curl, openssl, rsync and an OpenSSH client.
+Requirements: Node.js 20.19+ or 22.12+, pnpm, Go ≥ 1.25, curl, openssl, rsync and an OpenSSH client.
 
 ```bash
 git clone https://github.com/kittyruntime/home-server-interface
 cd home-server-interface
-sudo bash scripts/install.sh
+sudo bash scripts/install.sh --from-source
 ```
 
 For a local development environment (dev servers, hot reload, project layout, release process) see [docs/development.md](docs/development.md).

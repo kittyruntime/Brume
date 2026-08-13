@@ -7,6 +7,7 @@
 | `JWT_SECRET` | insecure dev default | Signing key for auth tokens. **Must** be set in production; the install script generates one. |
 | `NATS_URL` | — | NATS server URL for talking to the root-worker. |
 | `NATS_USER` / `NATS_PASS` | — | NATS credentials. |
+| `BACKEND_PORT` | `9001` | TCP port the backend listens on. The installer passes it to both systemd and nginx. |
 | `INSTALL_DIR` | — | Installation root; anchors runtime paths (e.g. the bundled `server.js`). |
 | `DASHBOARD_PATH` | — | Path to the built dashboard the backend serves. In dev, point it at `apps/dashboard/dist`. |
 | `WALLPAPER_DIR` | under `INSTALL_DIR` | Where uploaded desktop wallpapers are stored. |
@@ -32,7 +33,7 @@ environment variables:
 |---|---|---|
 | `VERSION` | latest release | Install/pin a specific tag, e.g. `VERSION=v1.28.1`. |
 | `INSTALL_DIR` | `/opt/hsi` | Installation directory. |
-| `APP_USER` | `app` | System user the backend runs as. |
+| `APP_USER` | `hsi` | System user the backend runs as. |
 | `BACKEND_PORT` | `9001` | API port. |
 | `NATS_SERVER_VERSION` | `v2.10.24` | NATS binary version to download. |
 | `SKIP_NGINX` | `0` | Skip nginx configuration. |

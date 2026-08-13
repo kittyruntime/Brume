@@ -30,6 +30,7 @@ set -euo pipefail
 
 APP_NAME="${APP_NAME:-hsi}"
 REPO="kittyruntime/home-server-interface"
+RELEASE_APP_NAME="hsi"
 
 # ── Mode detection ─────────────────────────────────────────────────────────────
 FROM_SOURCE=0
@@ -53,6 +54,64 @@ success() { echo -e "  ${GREEN}✓${NC}   $*"; }
 warn()    { echo -e "  ${YELLOW}!${NC}   $*"; }
 die()     { echo -e "\n  ${RED}✗ error:${NC} $*\n" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
+
+DL_DIR=""
+RELEASE_STAGE=""
+ROLLBACK_DIR=""
+DB_ROLLBACK_FILE=""
+SERVICES_STOPPED=0
+CORE_INSTALL_COMPLETE=0
+ROLLBACK_REL_PATHS=()
+
+cleanup_install_exit() {
+  local status=$?
+  set +e
+  if (( status != 0 )); then
+    if (( SERVICES_STOPPED == 1 )); then
+      systemctl stop "${APP_NAME}" "${APP_NAME}-root-worker" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$ROLLBACK_DIR" && -d "$ROLLBACK_DIR" ]]; then
+      warn "Install failed — restoring the previous application files."
+      local rel target backup
+      for rel in "${ROLLBACK_REL_PATHS[@]}"; do
+        target="$INSTALL_DIR/$rel"
+        backup="$ROLLBACK_DIR/$rel"
+        rm -rf -- "$target"
+        if [[ -e "$backup" || -L "$backup" ]]; then
+          mkdir -p "$(dirname "$target")"
+          mv -- "$backup" "$target"
+        fi
+      done
+      if [[ -f "$ROLLBACK_DIR/system-root-worker" ]]; then
+        install -m 755 "$ROLLBACK_DIR/system-root-worker" "/usr/local/bin/${APP_NAME}-root-worker"
+      fi
+    fi
+    if [[ -n "$DB_ROLLBACK_FILE" && -f "$DB_ROLLBACK_FILE" && -n "${DB_FILE:-}" ]]; then
+      warn "Restoring the pre-update database backup."
+      cp -- "$DB_ROLLBACK_FILE" "$DB_FILE"
+      chown "$APP_USER:" "$DB_FILE"
+    fi
+    if (( SERVICES_STOPPED == 1 )); then
+      warn "Restarting the previous services after the failed update."
+      systemctl start "${APP_NAME}-nats" "${APP_NAME}-root-worker" "${APP_NAME}" >/dev/null 2>&1 || true
+    fi
+  fi
+  if [[ -n "$ROLLBACK_DIR" && -d "$ROLLBACK_DIR" && $CORE_INSTALL_COMPLETE -eq 1 ]]; then
+    rm -rf -- "$ROLLBACK_DIR"
+  fi
+  if [[ -n "$DL_DIR" && -d "$DL_DIR" ]]; then
+    rm -rf -- "$DL_DIR"
+  fi
+}
+trap cleanup_install_exit EXIT
+
+[[ "$APP_NAME" =~ ^[a-z][a-z0-9-]{0,31}$ ]] \
+  || die "APP_NAME must start with a lowercase letter and contain only lowercase letters, digits, or hyphens."
+[[ "$BACKEND_PORT" =~ ^[0-9]{1,5}$ ]] \
+  && (( 10#$BACKEND_PORT >= 1 && 10#$BACKEND_PORT <= 65535 )) \
+  || die "BACKEND_PORT must be an integer between 1 and 65535."
+[[ "$NATS_SERVER_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || die "NATS_SERVER_VERSION must be a tag such as v2.10.24."
 
 # ── Must run as root ───────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Run with sudo: sudo $0"
@@ -204,7 +263,7 @@ if detect_legacy_app_install; then
       [[ -n "$VERSION" ]] || die "Could not fetch latest release from GitHub."
     fi
     VERSION="v${VERSION#v}"
-    PRE_URL="https://github.com/${REPO}/releases/download/${VERSION}/${APP_NAME}-${VERSION}-linux-amd64.tar.gz"
+    PRE_URL="https://github.com/${REPO}/releases/download/${VERSION}/${RELEASE_APP_NAME}-${VERSION}-linux-amd64.tar.gz"
     curl -fsIL --max-time 30 "$PRE_URL" >/dev/null \
       || die "Release asset not found for ${VERSION} (pre-rename version pin?) - nothing was changed. Re-run without VERSION to use the latest release."
   fi
@@ -230,21 +289,33 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
   APP_USER="$BACKEND_USER"
 
+  [[ "$BACKEND_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || die "BACKEND_USER is not a safe Linux account name."
   id "$BACKEND_USER" &>/dev/null \
     || die "User '$BACKEND_USER' does not exist."
 
   step "Checking prerequisites"
   check_cmd() { command -v "$1" &>/dev/null || die "'$1' not found. $2"; success "$1 found"; }
-  check_cmd node    "Install Node.js ≥ 18 from https://nodejs.org/"
+  check_cmd node    "Install Node.js 20.19+ or 22.12+ from https://nodejs.org/"
   check_cmd pnpm    "Install pnpm: npm install -g pnpm"
-  check_cmd go      "Install Go ≥ 1.21 from https://go.dev/dl/"
+  check_cmd go      "Install Go ≥ 1.25 from https://go.dev/dl/"
   check_cmd openssl "apt install openssl"
   check_cmd curl    "apt install curl"
   check_cmd rsync   "apt install rsync"
   check_cmd ssh     "apt install openssh-client"
 
-  NODE_MAJOR=$(node --version | sed 's/v\([0-9]*\).*/\1/')
-  [[ "$NODE_MAJOR" -ge 18 ]] || die "Node.js 18+ required, found $(node --version)"
+  NODE_VERSION_RAW=$(node --version)
+  NODE_VERSION_RAW="${NODE_VERSION_RAW#v}"
+  IFS=. read -r NODE_MAJOR NODE_MINOR _ <<< "$NODE_VERSION_RAW"
+  if ! (( (NODE_MAJOR == 20 && NODE_MINOR >= 19) || (NODE_MAJOR == 22 && NODE_MINOR >= 12) || NODE_MAJOR > 22 )); then
+    die "Node.js 20.19+ or 22.12+ required, found $(node --version)"
+  fi
+  GO_VERSION_RAW=$(cd "$APP_DIR/apps/root-worker" && go env GOVERSION)
+  GO_VERSION_RAW="${GO_VERSION_RAW#go}"
+  IFS=. read -r GO_MAJOR GO_MINOR _ <<< "$GO_VERSION_RAW"
+  if ! (( GO_MAJOR > 1 || (GO_MAJOR == 1 && GO_MINOR >= 25) )); then
+    die "Go 1.25+ required, found go$GO_VERSION_RAW"
+  fi
   NODE_BIN="$(command -v node)"
 
   info "Repo:         $APP_DIR"
@@ -261,6 +332,30 @@ else
   APP_USER="${APP_USER:-${APP_NAME}}"
   NODE_VERSION="22"
 
+  [[ "$APP_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || die "APP_USER is not a safe Linux account name."
+
+  # Release archives have a stable `hsi-*` filename and internal worker name;
+  # APP_NAME only namespaces the installed services and destination paths.
+  [[ "$INSTALL_DIR" == /* ]] || die "INSTALL_DIR must be an absolute path."
+  command -v realpath &>/dev/null || die "'realpath' not found. Install coreutils."
+  INSTALL_DIR=$(realpath -m -- "$INSTALL_DIR")
+  [[ "$INSTALL_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+    || die "INSTALL_DIR contains unsupported characters."
+  [[ -n "$INSTALL_DIR" && "$INSTALL_DIR" != "/" && "$INSTALL_DIR" != "/opt" && "$INSTALL_DIR" != "/usr" &&
+     "$INSTALL_DIR" != "/var" && "$INSTALL_DIR" != "/home" && "$INSTALL_DIR" != "/root" ]] \
+    || die "INSTALL_DIR must be a dedicated application directory, not a system root."
+  INSTALL_PARENT=$(dirname "$INSTALL_DIR")
+  [[ "$INSTALL_PARENT" != "/" ]] \
+    || die "INSTALL_DIR must be nested under a dedicated parent (for example /opt/$APP_NAME)."
+  [[ ! -e "$INSTALL_DIR" || -d "$INSTALL_DIR" ]] \
+    || die "INSTALL_DIR exists but is not a directory: $INSTALL_DIR"
+  if [[ -d "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+    [[ -f "$INSTALL_DIR/server.js" && -d "$INSTALL_DIR/database/prisma" \
+       && ( -f "$INSTALL_DIR/VERSION" || -f "$INSTALL_DIR/.env" ) ]] \
+      || die "INSTALL_DIR is non-empty and is not a recognized HSI installation: $INSTALL_DIR"
+  fi
+
   step "Checking prerequisites"
   command -v curl    &>/dev/null || die "'curl' not found. apt install curl"
   command -v openssl &>/dev/null || die "'openssl' not found. apt install openssl"
@@ -274,8 +369,11 @@ else
       | grep -oP '"tag_name":\s*"\K[^"]+')
     [[ -n "$VERSION" ]] || die "Could not fetch latest release from GitHub."
   fi
+  VERSION="v${VERSION#v}"
+  [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] \
+    || die "Invalid release version: $VERSION"
   APP_DIR="$INSTALL_DIR"
-  TARBALL_URL="https://github.com/${REPO}/releases/download/${VERSION}/${APP_NAME}-${VERSION}-linux-amd64.tar.gz"
+  TARBALL_URL="https://github.com/${REPO}/releases/download/${VERSION}/${RELEASE_APP_NAME}-${VERSION}-linux-amd64.tar.gz"
 
   info "Version:      $VERSION"
   info "Install dir:  $INSTALL_DIR"
@@ -316,8 +414,34 @@ else
 
   app_exec "nvm install $NODE_VERSION && nvm alias default $NODE_VERSION"
   NODE_BIN=$(app_exec "nvm which $NODE_VERSION")
-  NPM_BIN="$(dirname "$NODE_BIN")/npm"
   success "Node: $NODE_BIN"
+
+  # Download, fully extract and validate the release before stopping a running
+  # installation. Network or archive failures therefore leave it untouched.
+  step "Downloading and validating $VERSION"
+  DL_DIR=$(mktemp -d)
+  TARBALL="$DL_DIR/${RELEASE_APP_NAME}.tar.gz"
+  RELEASE_STAGE="$DL_DIR/release"
+  ARCHIVE_ROOT="${RELEASE_APP_NAME}-${VERSION}"
+  curl -fsSL --progress-bar "$TARBALL_URL" -o "$TARBALL" || die "Download failed: $TARBALL_URL"
+  tar -tzf "$TARBALL" | while IFS= read -r entry; do
+    [[ "$entry" == "$ARCHIVE_ROOT" || "$entry" == "$ARCHIVE_ROOT/"* ]] || exit 1
+    rel="${entry#"$ARCHIVE_ROOT"}"
+    rel="${rel#/}"
+    [[ "$rel" != ".." && "$rel" != ../* && "$rel" != */../* && "$rel" != */.. ]] || exit 1
+  done || die "Release archive has an unsafe or unexpected layout."
+  mkdir -p "$RELEASE_STAGE"
+  tar -xzf "$TARBALL" --no-same-owner --strip-components=1 -C "$RELEASE_STAGE"
+  [[ -f "$RELEASE_STAGE/server.js" \
+     && -f "$RELEASE_STAGE/public/index.html" \
+     && -x "$RELEASE_STAGE/bin/${RELEASE_APP_NAME}-root-worker" \
+     && -d "$RELEASE_STAGE/database/prisma" \
+     && -x "$RELEASE_STAGE/node_modules/.bin/prisma" \
+     && -x "$RELEASE_STAGE/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x" \
+     && -s "$RELEASE_STAGE/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node" \
+     && -f "$RELEASE_STAGE/runtime/package-lock.json" ]] \
+    || die "Release archive is incomplete."
+  success "Release downloaded and validated"
 
 fi
 
@@ -329,7 +453,11 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   SCHEMA_DIR="$APP_DIR/packages/database/prisma/schema"
 else
   DB_DIR="$APP_DIR/database/data"
-  SCHEMA_DIR="$APP_DIR/database/prisma/schema"
+  if [[ -d "$APP_DIR/database/prisma/schema" ]]; then
+    SCHEMA_DIR="$APP_DIR/database/prisma/schema"
+  else
+    SCHEMA_DIR="$RELEASE_STAGE/database/prisma/schema"
+  fi
 fi
 # The DB filename comes from the Prisma datasource, which is independent of
 # APP_NAME (e.g. the schema targets hsi.db while APP_NAME=app). Derive it from
@@ -359,6 +487,7 @@ fi
 if [[ "$IS_UPDATE" -eq 1 ]]; then
   step "Stopping services before update"
   systemctl stop "${APP_NAME}" "${APP_NAME}-root-worker" 2>/dev/null || true
+  SERVICES_STOPPED=1
   success "Application services stopped"
 fi
 
@@ -374,22 +503,13 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   step "Building root-worker"
   (
     cd "$APP_DIR/apps/root-worker"
-    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "${APP_NAME}-root-worker" .
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o "${APP_NAME}-root-worker" .
   )
   install -m 755 "$APP_DIR/apps/root-worker/${APP_NAME}-root-worker" /usr/local/bin/${APP_NAME}-root-worker
   success "Installed: /usr/local/bin/${APP_NAME}-root-worker"
 
   step "Building backend"
-  mkdir -p "$APP_DIR/apps/backend/dist"
-  sudo -u "$APP_USER" bash -c "
-    cd '$APP_DIR/apps/backend'
-    pnpm dlx esbuild src/server.ts \
-      --bundle --platform=node --target=node18 --format=esm \
-      --outfile=dist/server.js \
-      --external:@prisma/client --external:@prisma/engines --external:fsevents \
-      --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" \
-      --log-level=warning
-  "
+  sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && pnpm --filter @app/backend build"
   success "Backend bundled → apps/backend/dist/server.js"
 
   step "Building dashboard"
@@ -413,15 +533,9 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
 # =============================================================================
 else
 
-  step "Downloading $VERSION"
-  DL_DIR=$(mktemp -d)
-  trap 'rm -rf "$DL_DIR"' EXIT
-
-  TARBALL="$DL_DIR/${APP_NAME}.tar.gz"
-  curl -fsSL --progress-bar "$TARBALL_URL" -o "$TARBALL" || die "Download failed: $TARBALL_URL"
-  success "Downloaded"
-
+  step "Installing verified release"
   mkdir -p "$INSTALL_DIR"
+  chown "$APP_USER:" "$INSTALL_DIR"
   # tar overwrites and adds files but NEVER removes ones deleted between
   # releases. A leftover schema file is fatal: Prisma loads every *.prisma in
   # the schema dir, so a stale model (e.g. role.prisma after the Roles→Groups
@@ -429,31 +543,63 @@ else
   # whole update. Wipe the release-owned code dirs first so the new set is
   # clean — the live DB (database/data) and secrets (.env) live outside these
   # paths and are preserved.
-  rm -rf "$INSTALL_DIR/database/prisma" "$INSTALL_DIR/public"
-  tar -xzf "$TARBALL" --strip-components=1 -C "$INSTALL_DIR"
-  chown -R "$APP_USER:" "$INSTALL_DIR"
+  ROLLBACK_REL_PATHS=(
+    server.js public bin node_modules runtime scripts
+    database/prisma database/src database/package.json
+    package.json pnpm-lock.yaml pnpm-workspace.yaml LICENSE CHANGELOG.md README.md
+  )
+  if [[ "$IS_UPDATE" -eq 1 ]]; then
+    ROLLBACK_DIR="$INSTALL_DIR/.install-rollback-$$"
+    mkdir -p "$ROLLBACK_DIR"
+    for rel in "${ROLLBACK_REL_PATHS[@]}"; do
+      if [[ -e "$INSTALL_DIR/$rel" || -L "$INSTALL_DIR/$rel" ]]; then
+        mkdir -p "$ROLLBACK_DIR/$(dirname "$rel")"
+        mv -- "$INSTALL_DIR/$rel" "$ROLLBACK_DIR/$rel"
+      fi
+    done
+    if [[ -f "/usr/local/bin/${APP_NAME}-root-worker" ]]; then
+      cp -- "/usr/local/bin/${APP_NAME}-root-worker" "$ROLLBACK_DIR/system-root-worker"
+    fi
+  fi
+  cp -a "$RELEASE_STAGE/." "$INSTALL_DIR/"
+  chown -R "$APP_USER:" \
+    "$INSTALL_DIR/bin" \
+    "$INSTALL_DIR/public" \
+    "$INSTALL_DIR/database/prisma" \
+    "$INSTALL_DIR/database/src" \
+    "$INSTALL_DIR/database/package.json" \
+    "$INSTALL_DIR/node_modules" \
+    "$INSTALL_DIR/server.js" \
+    "$INSTALL_DIR/package.json" \
+    "$INSTALL_DIR/pnpm-lock.yaml" \
+    "$INSTALL_DIR/pnpm-workspace.yaml" \
+    "$INSTALL_DIR/runtime" \
+    "$INSTALL_DIR/LICENSE" \
+    "$INSTALL_DIR/CHANGELOG.md" \
+    "$INSTALL_DIR/README.md"
   success "Extracted to $INSTALL_DIR"
 
   step "Installing root-worker binary"
-  chmod +x "$INSTALL_DIR/bin/${APP_NAME}-root-worker"
-  install -m 755 "$INSTALL_DIR/bin/${APP_NAME}-root-worker" /usr/local/bin/${APP_NAME}-root-worker
+  chmod +x "$INSTALL_DIR/bin/${RELEASE_APP_NAME}-root-worker"
+  install -m 755 "$INSTALL_DIR/bin/${RELEASE_APP_NAME}-root-worker" /usr/local/bin/${APP_NAME}-root-worker
   success "Installed: /usr/local/bin/${APP_NAME}-root-worker"
 
-  step "Installing runtime dependencies"
+  step "Checking bundled runtime dependencies"
   PRISMA_BIN="$INSTALL_DIR/node_modules/.bin/prisma"
   TSX_BIN="$INSTALL_DIR/node_modules/.bin/tsx"
-  app_exec "
-    '$NPM_BIN' install \
-      --prefix '$INSTALL_DIR' \
-      --no-save --no-fund --no-audit \
-      @prisma/client@^6 prisma@^6 tsx@^4 bcryptjs@^2
-  "
-  success "Runtime dependencies installed"
+  PRISMA_SCHEMA_ENGINE_BIN="$INSTALL_DIR/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x"
+  PRISMA_QUERY_ENGINE_LIB="$INSTALL_DIR/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node"
+  [[ -x "$PRISMA_BIN" && -x "$TSX_BIN" ]] \
+    || die "Release archive is missing its locked runtime dependencies."
+  success "Locked runtime dependencies found"
 
   step "Generating Prisma client"
   app_exec "
     cd '$INSTALL_DIR/database'
-    NODE_PATH='$INSTALL_DIR/node_modules' '$PRISMA_BIN' generate
+    NODE_PATH='$INSTALL_DIR/node_modules' \
+      PRISMA_SCHEMA_ENGINE_BINARY='$PRISMA_SCHEMA_ENGINE_BIN' \
+      PRISMA_QUERY_ENGINE_LIBRARY='$PRISMA_QUERY_ENGINE_LIB' \
+      '$PRISMA_BIN' generate
   "
   success "Prisma client generated"
 
@@ -473,6 +619,7 @@ chown "$APP_USER:" "$DB_DIR"
 if [[ "$IS_UPDATE" -eq 1 ]]; then
   BACKUP="$DB_DIR/${APP_NAME}.db.bak-$(date +%Y%m%d-%H%M%S)"
   cp "$DB_FILE" "$BACKUP"
+  DB_ROLLBACK_FILE="$BACKUP"
   success "Database backed up → $BACKUP"
   ls -1t "$DB_DIR"/${APP_NAME}.db.bak-* 2>/dev/null | tail -n +6 | xargs -r rm --
 
@@ -487,16 +634,13 @@ if [[ "$IS_UPDATE" -eq 1 ]]; then
   # datasource path would resolve differently from within prisma/data-migrations).
   MIGRATIONS_DIR="$DB_WORK_DIR/prisma/data-migrations"
   if compgen -G "$MIGRATIONS_DIR/*.ts" > /dev/null 2>&1; then
-    # The runner imports @prisma/client: release mode generated it above, source
-    # mode has not (pnpm install has no postinstall generate).
-    if [[ "$FROM_SOURCE" -eq 1 ]]; then
-      sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && npx prisma generate"
-    fi
+    # The runner imports @prisma/client, generated above in release mode and by
+    # the canonical backend prebuild in source mode.
     for m in "$MIGRATIONS_DIR"/*.ts; do
       rel="prisma/data-migrations/$(basename "$m")"
       step "Running data migration: $(basename "$m")"
       if [[ "$FROM_SOURCE" -eq 1 ]]; then
-        sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && DATABASE_URL='file:$DB_FILE' npx tsx '$rel'"
+        sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && DATABASE_URL='file:$DB_FILE' pnpm exec tsx '$rel'"
       else
         app_exec "cd '$DB_WORK_DIR' && DATABASE_URL='file:$DB_FILE' NODE_PATH='$INSTALL_DIR/node_modules' '$TSX_BIN' '$rel'"
       fi
@@ -509,23 +653,23 @@ if [[ "$IS_UPDATE" -eq 1 ]]; then
   # just backed up above, so this is safe — and without the flag such schema
   # changes silently fail on update, leaving the running DB stale.
   if [[ "$FROM_SOURCE" -eq 1 ]]; then
-    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && npx prisma db push --accept-data-loss"
+    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && pnpm exec prisma db push --accept-data-loss"
   else
-    app_exec "cd '$DB_WORK_DIR' && NODE_PATH='$INSTALL_DIR/node_modules' '$PRISMA_BIN' db push --accept-data-loss"
+    app_exec "cd '$DB_WORK_DIR' && NODE_PATH='$INSTALL_DIR/node_modules' PRISMA_SCHEMA_ENGINE_BINARY='$PRISMA_SCHEMA_ENGINE_BIN' PRISMA_QUERY_ENGINE_LIBRARY='$PRISMA_QUERY_ENGINE_LIB' '$PRISMA_BIN' db push --accept-data-loss"
   fi
   success "Schema migrated (existing data preserved)"
 else
   if [[ "$FROM_SOURCE" -eq 1 ]]; then
-    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && npx prisma db push --accept-data-loss"
+    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && pnpm exec prisma db push --accept-data-loss"
   else
-    app_exec "cd '$DB_WORK_DIR' && NODE_PATH='$INSTALL_DIR/node_modules' '$PRISMA_BIN' db push --accept-data-loss"
+    app_exec "cd '$DB_WORK_DIR' && NODE_PATH='$INSTALL_DIR/node_modules' PRISMA_SCHEMA_ENGINE_BINARY='$PRISMA_SCHEMA_ENGINE_BIN' PRISMA_QUERY_ENGINE_LIBRARY='$PRISMA_QUERY_ENGINE_LIB' '$PRISMA_BIN' db push --accept-data-loss"
   fi
   success "Schema created"
 fi
 
 if [[ "${SKIP_SEED}" != "1" ]]; then
   if [[ "$FROM_SOURCE" -eq 1 ]]; then
-    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && npx tsx prisma/seed.ts"
+    sudo -u "$APP_USER" bash -c "cd '$DB_WORK_DIR' && pnpm exec tsx prisma/seed.ts"
   else
     app_exec "cd '$DB_WORK_DIR' && NODE_PATH='$INSTALL_DIR/node_modules' '$TSX_BIN' prisma/seed.ts"
   fi
@@ -661,7 +805,7 @@ step "Installing systemd services"
 
 # Backend + worker write their stdout/stderr to files here instead of the
 # systemd journal, so operators have plain log files to tail/ship.
-LOG_DIR="/var/log/hsi"
+LOG_DIR="/var/log/${APP_NAME}"
 install -d -o "$APP_USER" -g "$APP_USER" -m 755 "$LOG_DIR"
 
 # Keep those files from growing unbounded. copytruncate because systemd holds
@@ -739,6 +883,7 @@ User=$APP_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 $SOURCE_EXTRA
+Environment=BACKEND_PORT=$BACKEND_PORT
 ExecStart=$NODE_BIN $BACKEND_DIST
 Restart=on-failure
 RestartSec=5
@@ -760,6 +905,13 @@ systemctl enable "${APP_NAME}-nats" "${APP_NAME}-root-worker" "${APP_NAME}"
 systemctl restart "${APP_NAME}-nats"
 systemctl restart "${APP_NAME}-root-worker"
 systemctl restart "${APP_NAME}"
+SERVICES_STOPPED=0
+CORE_INSTALL_COMPLETE=1
+DB_ROLLBACK_FILE=""
+if [[ -n "$ROLLBACK_DIR" && -d "$ROLLBACK_DIR" ]]; then
+  rm -rf -- "$ROLLBACK_DIR"
+  ROLLBACK_DIR=""
+fi
 success "All services started"
 
 # =============================================================================
@@ -821,7 +973,14 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-ExecStart=/bin/bash -c 'set -e; v=\$(cat ${INSTALL_DIR}/.pending-update); tmp=\$(mktemp); trap "rm -f \$tmp ${INSTALL_DIR}/.pending-update" EXIT; curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh -o \$tmp; VERSION=\$v bash \$tmp'
+Environment=APP_NAME=${APP_NAME}
+Environment=INSTALL_DIR=${INSTALL_DIR}
+Environment=APP_USER=${APP_USER}
+Environment=BACKEND_PORT=${BACKEND_PORT}
+Environment=NATS_SERVER_VERSION=${NATS_SERVER_VERSION}
+Environment=SKIP_NGINX=${SKIP_NGINX}
+Environment=SKIP_SEED=${SKIP_SEED}
+ExecStart=:/bin/bash -c 'set -e; v=\$(cat "\$INSTALL_DIR/.pending-update"); tmp=\$(mktemp); trap "rm -f \$tmp" EXIT; curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh -o \$tmp; VERSION=\$v bash \$tmp; rm -f "\$INSTALL_DIR/.pending-update"'
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${APP_NAME}-update
@@ -880,20 +1039,64 @@ server {
         proxy_set_header   X-Real-IP         \$remote_addr;
         proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto \$scheme;
+        client_max_body_size 16m;
     }
 
     location /files {
         proxy_pass              http://127.0.0.1:$BACKEND_PORT;
         proxy_http_version      1.1;
-        proxy_set_header        Host          \$host;
-        proxy_set_header        X-Real-IP     \$remote_addr;
+        proxy_set_header        Host              \$host;
+        proxy_set_header        X-Real-IP         \$remote_addr;
+        proxy_set_header        X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto \$scheme;
         client_max_body_size    100m;
         proxy_request_buffering off;
         proxy_read_timeout      300s;
     }
 
-    location /health {
-        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+    location /s/ {
+        proxy_pass              http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version      1.1;
+        proxy_set_header        Host              \$host;
+        proxy_set_header        X-Real-IP         \$remote_addr;
+        proxy_set_header        X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto \$scheme;
+        proxy_buffering         off;
+        proxy_read_timeout      300s;
+    }
+
+    location /containers/ {
+        proxy_pass              http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version      1.1;
+        proxy_set_header        Host              \$host;
+        proxy_set_header        X-Real-IP         \$remote_addr;
+        proxy_set_header        X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto \$scheme;
+        proxy_set_header        Connection        "";
+        proxy_buffering         off;
+        proxy_cache             off;
+        proxy_read_timeout      1h;
+    }
+
+    location /system/ {
+        proxy_pass              http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version      1.1;
+        proxy_set_header        Host              \$host;
+        proxy_set_header        X-Real-IP         \$remote_addr;
+        proxy_set_header        X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto \$scheme;
+        client_max_body_size    256m;
+        proxy_request_buffering off;
+        proxy_buffering         off;
+        proxy_read_timeout      300s;
+    }
+
+    location = /health {
+        proxy_pass              http://127.0.0.1:$BACKEND_PORT;
+        proxy_set_header        Host              \$host;
+        proxy_set_header        X-Real-IP         \$remote_addr;
+        proxy_set_header        X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Proto \$scheme;
     }
 
     location / {
@@ -951,8 +1154,8 @@ echo -e "  ${BOLD}Useful commands:${NC}"
 echo -e "    systemctl status ${APP_NAME}               # backend"
 echo -e "    systemctl status ${APP_NAME}-root-worker   # privilege worker"
 echo -e "    systemctl status ${APP_NAME}-nats          # message bus"
-echo -e "    tail -f /var/log/hsi/app.log               # backend logs"
-echo -e "    tail -f /var/log/hsi/root-worker.log       # worker logs"
+echo -e "    tail -f ${LOG_DIR}/app.log               # backend logs"
+echo -e "    tail -f ${LOG_DIR}/root-worker.log       # worker logs"
 if [[ "$FROM_SOURCE" -eq 1 ]]; then
   echo -e "    sudo $0 --from-source        # re-run to update"
 else

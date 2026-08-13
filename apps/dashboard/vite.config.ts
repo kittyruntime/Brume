@@ -10,6 +10,9 @@ export default defineConfig({
       '/trpc': 'http://localhost:9001',
       '/health': 'http://localhost:9001',
       '/files': 'http://localhost:9001',
+      '/s': 'http://localhost:9001',
+      '/containers': 'http://localhost:9001',
+      '/system': 'http://localhost:9001',
     },
   },
 })

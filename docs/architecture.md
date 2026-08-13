@@ -38,7 +38,7 @@ and replies. Heavy work (large copies/moves, upload assembly) is run as a
 - `jsonwebtoken` (auth) + `bcryptjs` (password hashing)
 - [NATS](https://nats.io) client for talking to the root-worker
 
-**Root worker** (`apps/root-worker`, Go ≥ 1.21)
+**Root worker** (`apps/root-worker`, Go ≥ 1.25)
 - One file per domain: `fs.go`, `disk.go`, `docker.go`, `sharing.go`, `userctx.go`
 - Subscribes to NATS subjects and performs the actual privileged syscalls
 

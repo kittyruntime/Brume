@@ -4,8 +4,8 @@
 
 ## Prérequis
 
-- Node.js ≥ 18, pnpm
-- Go ≥ 1.21
+- Node.js 20.19+ or 22.12+, pnpm
+- Go ≥ 1.25
 - Docker (pour NATS)
 
 ## 1. Dépendances
@@ -17,10 +17,8 @@ pnpm install
 ## 2. Base de données
 
 ```bash
-cd packages/database
-npx prisma db push
-npx tsx prisma/seed.ts   # crée admin / admin
-cd ../..
+pnpm --filter @app/database db:push
+pnpm --filter @app/database db:seed   # crée admin / admin
 ```
 
 ## 3. Variables d'environnement backend

@@ -177,7 +177,7 @@ export const fsRouter = router({
     .query(async ({ ctx, input }) => {
       const p = normalize(input.path)
       await checkPathPerm(ctx, p, "canRead")
-      return { token: signFileToken(ctx.user.userId, ctx.user.isAdmin, p) }
+      return { token: signFileToken(ctx.user.userId, p) }
     }),
 
   // ── readText (sync) — preview/edit content, with a binary + size guard ───────

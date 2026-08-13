@@ -46,13 +46,12 @@ export function verifyToken(token: string): TokenPayload {
 // URLs, browser history, and server access logs.
 export interface FileTokenPayload {
   userId: string
-  isAdmin: boolean
   path: string
   scope: "file-read"
 }
 
-export function signFileToken(userId: string, isAdmin: boolean, path: string): string {
-  return jwt.sign({ userId, isAdmin, path, scope: "file-read" }, JWT_SECRET, { expiresIn: "15m" })
+export function signFileToken(userId: string, path: string): string {
+  return jwt.sign({ userId, path, scope: "file-read" }, JWT_SECRET, { expiresIn: "15m" })
 }
 
 export function verifyFileToken(token: string): FileTokenPayload {

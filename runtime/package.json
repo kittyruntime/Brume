@@ -1,0 +1,13 @@
+{
+  "name": "@app/release-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned runtime dependencies bundled into Home Server Interface release archives.",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "bcryptjs": "2.4.3",
+    "prisma": "6.19.3",
+    "tsx": "4.23.12"
+  }
+}

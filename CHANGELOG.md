@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Immediate REST privilege revocation**: file uploads, downloads, container logs and configuration
+  backups now reload the account's current roles and existence from the database instead of trusting
+  week-long JWT claims. File tokens remain short-lived and path-scoped, but permission changes and
+  account deletion now also invalidate their access immediately.
+- **Per-user upload isolation**: resumable upload state is bound to its creator across chunk, status,
+  completion and cancellation requests. Metadata is immutable after creation, permissions are checked
+  again during long uploads and finalization, and concurrent ID collisions no longer cross accounts.
+- **Symlink-safe file operations**: copy, ZIP creation, shared-folder archives and extraction refuse
+  symbolic links and special files, use no-follow/exclusive opens, and reject symlinked extraction
+  targets, blocking ordinary link-based escapes from an allowed Place.
+
+### Fixed
+- **Production API routing**: the generated nginx configuration now forwards public shares, container
+  log streams and configuration backup/restore endpoints, preserves client IP information safely, and
+  honors a custom `BACKEND_PORT` consistently in nginx, systemd and the backend.
+- **Reliable upload retries**: transient chunk failures retain staged progress, inactive-upload cleanup
+  follows actual activity, checksums are validated before queueing, and repeated completion requests
+  reuse the same job instead of trying to rename an already-finalized temporary file.
+- **Reproducible builds and releases**: local, CI, source-install and release builds use the same locked
+  esbuild command; Prisma generation is automatic; release archives include their fully locked runtime
+  dependency tree; the built server gets a startup smoke test; and manual releases build the requested
+  tag rather than the current branch.
+
+### Changed
+- CI and the release preflight now run lint, TypeScript/Vue checks, backend security tests, Go tests,
+  formatting/vet checks and production builds. The dependency lock also pins the patched
+  `brace-expansion` release reported by the package audit.
+
 ## [1.48.0] - 2026-08-10
 
 ### Changed

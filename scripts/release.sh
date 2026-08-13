@@ -16,6 +16,10 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 VERSION="${VERSION#v}"   # strip leading 'v' if supplied
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+  echo "Invalid semantic version: $VERSION" >&2
+  exit 1
+fi
 TAG="v$VERSION"
 DATE=$(date +%Y-%m-%d)
 
@@ -38,6 +42,9 @@ if git rev-parse "$TAG" &>/dev/null; then
   echo "Tag $TAG already exists." >&2
   exit 1
 fi
+
+echo "Running release verification..."
+pnpm verify
 
 # ── Validate [Unreleased] has content ─────────────────────────────────────────
 

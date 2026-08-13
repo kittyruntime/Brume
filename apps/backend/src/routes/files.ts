@@ -3,16 +3,23 @@ import { createReadStream } from "node:fs"
 import { stat } from "node:fs/promises"
 import { Readable } from "node:stream"
 import { join, basename, normalize } from "node:path"
-import { verifyToken, verifyFileToken, verifyWallpaperToken, isTokenBlacklisted } from "../trpc/auth"
+import { verifyFileToken, verifyWallpaperToken } from "../trpc/auth"
 import { prisma } from "@app/database"
 import { publishJob, requestReadChunk, requestSync, writeChunk } from "../nats"
 import { isWithinRoot } from "../utils/fs-guard"
 import { guessMime, isInlineSafe } from "../utils/mime"
 import {
-  getUpload, setUpload, deleteUpload, startUploadGc,
+  getUpload, getUploadForOwner, claimUpload, markUploadActive, hasUploadFinalizationStarted,
+  beginUploadWrite, endUploadWrite, waitForUploadWrites, cancelUpload,
+  deleteUploadIfSame, markUploadCancellationPending, isUploadCancellationPending,
+  clearUploadCancellation, resolveUploadTotalBytes, getUploadPhase, startUploadGc,
   MAX_CHUNKS, type UploadState,
 } from "../services/upload.service"
 import { wallpaperPath } from "../services/wallpaper-storage"
+import { authenticateRequest } from "../utils/request-auth"
+
+const UPLOAD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const CANCEL_CLEANUP_WAIT_MS = 3_000
 
 // Parses a single-range "bytes=start-end" Range header against a known
 // total size. Returns null when there's no usable range (caller should
@@ -74,16 +81,90 @@ async function getLinuxUser(userId: string): Promise<string | null> {
   return u?.username ?? null
 }
 
-function authFromRequest(req: { headers: { authorization?: string } }) {
-  const h = req.headers.authorization
-  if (!h?.startsWith("Bearer ")) return null
-  try {
-    const payload = verifyToken(h.slice(7))
-    if (isTokenBlacklisted(payload.jti)) return null
-    return payload
-  } catch {
-    return null
+class UploadFinalizeHttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly responseBody: unknown,
+  ) {
+    super(typeof responseBody === "string" ? responseBody : "Upload finalization failed")
   }
+}
+
+async function finalizeUploadState(
+  state: UploadState,
+  user: { userId: string; isAdmin: boolean },
+  expectedSha: string,
+): Promise<string> {
+  if (state.received.size !== state.totalChunks) {
+    const missing = Array.from({ length: state.totalChunks }, (_, i) => i)
+      .filter(i => !state.received.has(i))
+    throw new UploadFinalizeHttpError(409, { error: "Upload incomplete", missing })
+  }
+
+  // Permissions and the Linux identity can change during a long upload.
+  // Revalidate both before publishing the final atomic rename.
+  const allowedRoot = await resolveAllowedRoot(user.userId, user.isAdmin, state.destDir, "canWrite")
+  if (allowedRoot === undefined) throw new UploadFinalizeHttpError(403, "Forbidden")
+  const linuxUser = await getLinuxUser(user.userId)
+  if (!linuxUser) {
+    throw new UploadFinalizeHttpError(500, "User has no Linux account configured")
+  }
+
+  // A lost HTTP response must not enqueue a second rename after the first
+  // finalize succeeded. Reuse pending/running/completed jobs; only a failed
+  // job is eligible for an explicit retry against the same staged file.
+  if (state.finalizeJobId) {
+    const priorJob = await prisma.job.findUnique({
+      where: { id: state.finalizeJobId },
+      select: { status: true },
+    })
+    if (!priorJob || priorJob.status !== "failed") return state.finalizeJobId
+    state.finalizeJobId = undefined
+  }
+
+  const jobId = await publishJob(
+    "fs.finalize",
+    {
+      linuxUsername: linuxUser,
+      tempFile:      state.tempPath,
+      destFile:      join(state.destDir, state.fileName),
+      allowedRoot:   allowedRoot ?? "",
+      expectedSha,
+    },
+    user.userId,
+  )
+  state.finalizeJobId = jobId
+  state.linuxUser = linuxUser
+  state.allowedRoot = allowedRoot ?? ""
+  return jobId
+}
+
+async function waitForCleanupCompletion(jobId: string): Promise<boolean> {
+  const deadline = Date.now() + CANCEL_CLEANUP_WAIT_MS
+  while (Date.now() < deadline) {
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    })
+    if (job?.status === "completed") return true
+    // A failed attempt can still be redelivered by JetStream, so keep polling
+    // within the bounded window. If it never completes, the caller retains the
+    // cancelled state/tombstone and a late retry cannot hit a reused id.
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+  return false
+}
+
+async function uploadFinalizationIsActive(state: UploadState): Promise<boolean> {
+  if (state.finalizePromise || (state.finalizeSha && !state.finalizeJobId)) return true
+  if (!state.finalizeJobId) return false
+  const job = await prisma.job.findUnique({
+    where: { id: state.finalizeJobId },
+    select: { status: true },
+  })
+  // Missing state is ambiguous and therefore treated as active; only an
+  // observed terminal job makes deletion of the staging path safe.
+  return !job || job.status === "pending" || job.status === "running"
 }
 
 // Pulls one 4 MB chunk at a time from the worker via requestReadChunk and
@@ -140,7 +221,13 @@ export async function fileRoutes(app: FastifyInstance) {
   // Clean up uploads that have been silent for more than UPLOAD_TTL_MS.
   startUploadGc((id, state) => {
     app.log.warn({ uploadId: id }, "Stale upload evicted by GC")
+    markUploadCancellationPending(id, state.ownerUserId)
     publishJob("fs.delete", { linuxUsername: state.linuxUser, path: state.tempPath, allowedRoot: state.allowedRoot })
+      .then(async jobId => {
+        if (await waitForCleanupCompletion(jobId)) {
+          clearUploadCancellation(id, state.ownerUserId)
+        }
+      })
       .catch(err => app.log.error(err, "Failed to clean up stale upload temp file"))
   })
 
@@ -163,19 +250,28 @@ export async function fileRoutes(app: FastifyInstance) {
     if (!token || !rawPath) return reply.status(400).send("Missing params")
     const filePath = normalize(rawPath)
 
-    let user: { userId: string; isAdmin: boolean }
+    let userId: string
     try {
       const payload = verifyFileToken(token)
       if (payload.path !== filePath) return reply.status(403).send("Forbidden")
-      user = payload
+      userId = payload.userId
     } catch {
       return reply.status(401).send("Unauthorized")
     }
 
-    const allowedRoot = await resolveAllowedRoot(user.userId, user.isAdmin, filePath, "canRead")
+    // File tokens are short-lived and path-scoped, but account deletion and
+    // permission changes still take effect immediately. Never authorize from
+    // role claims embedded when the token was minted.
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isAdmin: true },
+    })
+    if (!currentUser) return reply.status(401).send("Unauthorized")
+
+    const allowedRoot = await resolveAllowedRoot(userId, currentUser.isAdmin, filePath, "canRead")
     if (allowedRoot === undefined) return reply.status(403).send("Forbidden")
 
-    const linuxUser = await getLinuxUser(user.userId)
+    const linuxUser = await getLinuxUser(userId)
     const name = basename(filePath)
     const mime = guessMime(name)
     // Only ever honor `inline=1` for passive media we know is safe to render
@@ -328,47 +424,71 @@ export async function fileRoutes(app: FastifyInstance) {
   // already-authenticated, already-permission-checked transfer whose volume
   // scales with file size by design.
   app.post("/files/upload/chunk", { config: { rateLimit: false } }, async (req, reply) => {
-    const user = authFromRequest(req)
+    const user = await authenticateRequest(req)
     if (!user) return reply.status(401).send("Unauthorized")
 
-    const uploadId    = req.headers["x-upload-id"]    as string
-    const chunkIndex  = parseInt(req.headers["x-chunk-index"]  as string, 10)
-    const totalChunks = parseInt(req.headers["x-total-chunks"] as string, 10)
-    const chunkOffset = parseInt(req.headers["x-chunk-offset"] as string, 10)
-    const rawFileName = decodeURIComponent(req.headers["x-file-name"] as string ?? "")
-    const fileName    = basename(rawFileName)
-    const destDir     = normalize(decodeURIComponent(req.headers["x-dest-dir"]  as string ?? ""))
+    const uploadId    = req.headers["x-upload-id"] as string
+    const chunkIndex  = Number(req.headers["x-chunk-index"])
+    const totalChunks = Number(req.headers["x-total-chunks"])
+    const chunkOffset = Number(req.headers["x-chunk-offset"])
+    let rawFileName: string
+    let destDir: string
+    try {
+      rawFileName = decodeURIComponent(req.headers["x-file-name"] as string ?? "")
+      destDir = normalize(decodeURIComponent(req.headers["x-dest-dir"] as string ?? ""))
+    } catch {
+      return reply.status(400).send("Invalid upload metadata encoding")
+    }
+    const fileName = basename(rawFileName)
+    const totalBytesHeader = req.headers["x-total-bytes"] as string | undefined
 
-    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || isNaN(chunkOffset) || !fileName || !destDir)
+    if (!uploadId || !Number.isSafeInteger(chunkIndex) || !Number.isSafeInteger(totalChunks) ||
+        !Number.isSafeInteger(chunkOffset) || !fileName || fileName === "." || fileName === ".." || fileName.includes("\0") ||
+        !destDir.startsWith("/") || destDir.includes("\0"))
       return reply.status(400).send("Missing upload metadata")
 
     // uploadId ends up in a filename on disk — enforce an opaque-token shape.
-    if (!/^[A-Za-z0-9-]{1,64}$/.test(uploadId))
+    if (!UPLOAD_ID_RE.test(uploadId))
       return reply.status(400).send("Invalid upload id")
 
     if (chunkOffset < 0 || (chunkIndex === 0 && chunkOffset !== 0))
       return reply.status(400).send("Invalid chunk offset")
 
-    if (totalChunks > MAX_CHUNKS)
+    if (totalChunks < 1 || totalChunks > MAX_CHUNKS)
       return reply.status(400).send(`totalChunks exceeds maximum of ${MAX_CHUNKS}`)
 
     if (chunkIndex < 0 || chunkIndex >= totalChunks)
       return reply.status(400).send("chunkIndex out of range")
 
+    // Resolve existing state before parsing X-Total-Bytes: the header is
+    // required to initialize an upload, but remains optional on later chunks
+    // for compatibility with the original route contract.
+    let state = getUpload(uploadId)
+    if (state && state.ownerUserId !== user.userId) {
+      // Do not reveal whether another user's opaque upload id exists.
+      return reply.status(404).send("Unknown upload")
+    }
+    if (state) markUploadActive(state)
+    if (state?.cancelled || isUploadCancellationPending(uploadId, user.userId)) {
+      return reply.status(409).send("Upload is being cancelled")
+    }
+    if (state && hasUploadFinalizationStarted(state)) {
+      return reply.status(409).send("Upload finalization has already started")
+    }
+
+    const totalBytes = resolveUploadTotalBytes(totalBytesHeader, state)
+    if (totalBytes === null) {
+      return reply.status(400).send("Missing or invalid X-Total-Bytes")
+    }
+
     const allowedRoot = await resolveAllowedRoot(user.userId, user.isAdmin, destDir, "canWrite")
     if (allowedRoot === undefined) return reply.status(403).send("Forbidden")
+    const linuxUser = await getLinuxUser(user.userId)
+    if (!linuxUser) return reply.status(500).send("User has no Linux account configured")
 
     // Resolve state (init on first chunk).
-    let state = getUpload(uploadId)
     if (!state) {
-      const linuxUser = await getLinuxUser(user.userId)
-      if (!linuxUser) return reply.status(500).send("User has no Linux account configured")
-
       // Disk preflight — only done once, when the upload state is created.
-      const totalBytesHeader = req.headers["x-total-bytes"] as string | undefined
-      const totalBytes = totalBytesHeader !== undefined ? parseInt(totalBytesHeader, 10) : NaN
-      if (isNaN(totalBytes) || totalBytes < 0)
-        return reply.status(400).send("Missing or invalid X-Total-Bytes")
       try {
         const { free } = await requestSync<{ total: number; free: number }>(
           "root.fs.diskusage",
@@ -386,17 +506,32 @@ export async function fileRoutes(app: FastifyInstance) {
       // finalize rename is atomic and there is no double-write.
       const tempPath = join(destDir, `.upload-${uploadId}.part`)
       const newState: UploadState = {
+        ownerUserId: user.userId,
         received: new Set(), totalChunks, fileName, destDir, tempPath,
-        linuxUser, allowedRoot: allowedRoot ?? "", createdAt: Date.now(),
-        totalBytes,
+        linuxUser, allowedRoot: allowedRoot ?? "", createdAt: Date.now(), lastActivityAt: Date.now(),
+        totalBytes, activeWrites: 0, cancelled: false, writeIdleWaiters: [],
       }
-      setUpload(uploadId, newState)
-      state = newState
+      // A concurrent first chunk or cancellation may have won during the
+      // asynchronous preflight. Claim checks both atomically in this process.
+      const claim = claimUpload(uploadId, newState)
+      if (claim.cancelled) return reply.status(409).send("Upload is being cancelled")
+      state = claim.state
+      if (state.ownerUserId !== user.userId) return reply.status(404).send("Unknown upload")
+    }
+    if (
+      state.totalChunks !== totalChunks || state.totalBytes !== totalBytes ||
+      state.fileName !== fileName || state.destDir !== destDir
+    ) {
+      return reply.status(409).send("Upload metadata does not match the existing upload")
     }
 
     const body = req.body as Buffer
+    if (!Buffer.isBuffer(body)) return reply.status(400).send("Missing chunk data")
     if (chunkOffset + body.length > state.totalBytes)
       return reply.status(400).send("Chunk exceeds declared upload size")
+    if (!beginUploadWrite(state)) {
+      return reply.status(409).send("Upload no longer accepts chunks")
+    }
 
     // Delegate the write to the worker: it writes the binary data at the
     // given byte offset into the temp file as the linuxUser (seteuid).
@@ -405,18 +540,25 @@ export async function fileRoutes(app: FastifyInstance) {
         uploadId,
         offset:        chunkOffset,
         destDir:       state.destDir,
-        linuxUsername: state.linuxUser,
-        allowedRoot:   state.allowedRoot,
+        linuxUsername: linuxUser,
+        allowedRoot:   allowedRoot ?? "",
         data:          body,
       })
+      state.received.add(chunkIndex)
+      state.linuxUser = linuxUser
+      state.allowedRoot = allowedRoot ?? ""
     } catch (e: any) {
-      deleteUpload(uploadId)
+      // Keep the state: a timeout may happen after the worker wrote the bytes,
+      // and retrying the same offset safely overwrites them. Dropping the state
+      // here would forget all earlier chunks and make resume/finalize fail.
+      markUploadActive(state)
       if (e?.code === "EACCES") return reply.status(403).send("Permission denied")
       if (e?.code === "ENOSPC") return reply.status(507).send("Insufficient storage")
       return reply.status(500).send(e?.message ?? "Chunk write failed")
+    } finally {
+      endUploadWrite(state)
+      markUploadActive(state)
     }
-
-    state.received.add(chunkIndex)
 
     // All chunks written — but finalize is no longer auto-triggered here.
     // The client must call POST /files/upload/complete (with the expected
@@ -440,36 +582,50 @@ export async function fileRoutes(app: FastifyInstance) {
   // Body: { uploadId: string, sha256: string } — sha256 is passed through to
   // the worker as expectedSha so the write is verified end-to-end.
   app.post("/files/upload/complete", async (req, reply) => {
-    const user = authFromRequest(req)
+    const user = await authenticateRequest(req)
     if (!user) return reply.status(401).send("Unauthorized")
 
     const { uploadId, sha256 } = (req.body ?? {}) as { uploadId?: string; sha256?: string }
     if (!uploadId || !sha256) return reply.status(400).send("Missing uploadId or sha256")
 
-    const state = getUpload(uploadId)
+    const state = getUploadForOwner(uploadId, user.userId)
     if (!state) return reply.status(404).send("Unknown upload")
+    if (state.cancelled) return reply.status(404).send("Unknown upload")
 
-    if (state.received.size !== state.totalChunks) {
-      const missing = Array.from({ length: state.totalChunks }, (_, i) => i)
-        .filter(i => !state.received.has(i))
-      return reply.status(409).send({ error: "Upload incomplete", missing })
+    if (typeof sha256 !== "string" || !/^[a-fA-F0-9]{64}$/.test(sha256)) {
+      return reply.status(400).send("Invalid sha256")
+    }
+    const expectedSha = sha256.toLowerCase()
+
+    // Set one shared finalization promise before any permission/database await.
+    // This is both the write lock and the idempotency primitive: concurrent
+    // completion requests with the same checksum await the exact same work.
+    if (state.activeWrites > 0) {
+      return reply.status(409).send("Upload still has chunk writes in progress")
+    }
+    if (state.finalizeSha && state.finalizeSha !== expectedSha) {
+      return reply.status(409).send("Upload is already being finalized with a different checksum")
+    }
+    let finalizePromise = state.finalizePromise
+    if (!finalizePromise) {
+      state.finalizeSha = expectedSha
+      finalizePromise = finalizeUploadState(state, user, expectedSha)
+      state.finalizePromise = finalizePromise
     }
 
-    const destFile = join(state.destDir, state.fileName)
-
-    const jobId = await publishJob(
-      "fs.finalize",
-      {
-        linuxUsername: state.linuxUser,
-        tempFile:      state.tempPath,
-        destFile,
-        allowedRoot:   state.allowedRoot,
-        expectedSha:   sha256,
-      },
-      user.userId,
-    )
-
-    return reply.send({ jobId })
+    try {
+      const jobId = await finalizePromise
+      markUploadActive(state)
+      return reply.send({ jobId })
+    } catch (error) {
+      if (!state.finalizeJobId) state.finalizeSha = undefined
+      if (error instanceof UploadFinalizeHttpError) {
+        return reply.status(error.statusCode).send(error.responseBody)
+      }
+      throw error
+    } finally {
+      if (state.finalizePromise === finalizePromise) state.finalizePromise = undefined
+    }
   })
 
   // ── GET /files/upload/status?uploadId=<id> ────────────────────────────────
@@ -486,37 +642,90 @@ export async function fileRoutes(app: FastifyInstance) {
   // staged (a disk listing could otherwise report a truncated `.part`, and a
   // resuming client would skip it → corrupt assembly).
   app.get("/files/upload/status", async (req, reply) => {
-    const user = authFromRequest(req)
+    const user = await authenticateRequest(req)
     if (!user) return reply.status(401).send("Unauthorized")
 
     const { uploadId } = req.query as Record<string, string>
     if (!uploadId) return reply.status(400).send("Missing uploadId")
 
-    const state = getUpload(uploadId)
+    const state = getUploadForOwner(uploadId, user.userId)
     if (!state) return reply.send({ known: false, staged: [] })
+    if (state.cancelled) return reply.send({ known: false, staged: [] })
 
+    markUploadActive(state)
     const staged = [...state.received].sort((a, b) => a - b)
-    return reply.send({ known: true, staged })
+    const finalizeJob = state.finalizeJobId
+      ? await prisma.job.findUnique({
+          where: { id: state.finalizeJobId },
+          select: { status: true, error: true },
+        })
+      : null
+    return reply.send({
+      known: true,
+      staged,
+      totalChunks: state.totalChunks,
+      phase: getUploadPhase(state, finalizeJob?.status),
+      jobId: state.finalizeJobId,
+      jobStatus: finalizeJob?.status,
+      jobError: finalizeJob?.error,
+    })
   })
 
   // ── DELETE /files/upload/cancel ───────────────────────────────────────────
   app.delete("/files/upload/cancel", async (req, reply) => {
-    const user = authFromRequest(req)
+    const user = await authenticateRequest(req)
     if (!user) return reply.status(401).send("Unauthorized")
 
     const { uploadId } = (req.body ?? {}) as { uploadId?: string }
     if (!uploadId) return reply.status(400).send("Missing uploadId")
+    if (!UPLOAD_ID_RE.test(uploadId)) return reply.status(400).send("Invalid upload id")
 
-    const state = getUpload(uploadId)
-    if (!state) return reply.send({ ok: true })
+    // Tombstone before looking up state again: this also catches DELETE racing
+    // the first chunk's async authorization/disk preflight, when no state has
+    // been inserted yet.
+    markUploadCancellationPending(uploadId, user.userId)
+    const state = getUploadForOwner(uploadId, user.userId)
+    if (!state) return reply.send({ ok: true, cleanupPending: false })
 
-    deleteUpload(uploadId)
+    // Lock out both new chunks and /complete before awaiting database state.
+    // If finalization was already active, roll the cancellation lock back and
+    // leave that atomic rename alone.
+    cancelUpload(state)
+    if (await uploadFinalizationIsActive(state)) {
+      state.cancelled = false
+      clearUploadCancellation(uploadId, user.userId)
+      return reply.status(409).send("Upload finalization is in progress")
+    }
 
-    publishJob(
-      "fs.delete",
-      { linuxUsername: state.linuxUser, path: state.tempPath, allowedRoot: state.allowedRoot },
-    ).catch(err => app.log.error(err, "Failed to clean up upload temp file on cancel"))
+    // Wait for already-started writes before scheduling deletion. Keeping the
+    // cancelled state in the map until cleanup completes (or GC) prevents the
+    // same id from recreating a staging file under a late delete job.
+    await waitForUploadWrites(state)
+    let cleanupPromise = state.cleanupPromise
+    if (!cleanupPromise) {
+      cleanupPromise = (async () => {
+        const cleanupJobId = await publishJob(
+          "fs.delete",
+          { linuxUsername: state.linuxUser, path: state.tempPath, allowedRoot: state.allowedRoot },
+        )
+        return waitForCleanupCompletion(cleanupJobId)
+      })()
+      state.cleanupPromise = cleanupPromise
+    }
 
-    return reply.send({ ok: true })
+    let cleanupCompleted: boolean
+    try {
+      cleanupCompleted = await cleanupPromise
+    } catch (error) {
+      if (state.cleanupPromise === cleanupPromise) state.cleanupPromise = undefined
+      app.log.error(error, "Failed to schedule upload temp-file cleanup")
+      return reply.status(502).send("Could not schedule upload cleanup")
+    }
+
+    if (cleanupCompleted) {
+      deleteUploadIfSame(uploadId, state)
+      clearUploadCancellation(uploadId, user.userId)
+    }
+    return reply.send({ ok: true, cleanupPending: !cleanupCompleted })
   })
 }

@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- **Node.js ≥ 20** and **pnpm**
-- **Go ≥ 1.21** (for the root-worker)
+- **Node.js 20.19+ or 22.12+** and **pnpm**
+- **Go ≥ 1.25** (for the root-worker)
 - A running **NATS** server with JetStream (the install script sets one up; for
   local dev you can run `nats-server -js`)
 - `curl`, `openssl`
@@ -14,8 +14,9 @@
 pnpm install
 ```
 
-The Prisma client is generated on install. If you change the schema
-(`packages/database/prisma/schema/`), regenerate it:
+The Prisma client is generated automatically before builds and typechecks. If
+you change the schema (`packages/database/prisma/schema/`), you can regenerate
+it explicitly:
 
 ```bash
 pnpm --filter @app/database db:generate
@@ -49,24 +50,21 @@ cd apps/root-worker && go build -o root-worker . && ./root-worker
 
 ## Build & verify
 
-There is **no unit-test suite yet**; verification is build + typecheck.
-
 ```bash
-pnpm -r build                              # build all workspaces
-pnpm --filter @app/dashboard exec vue-tsc -b   # dashboard type check
-pnpm lint                                  # ESLint over all TS/Vue (pnpm lint:fix to auto-fix)
-cd apps/root-worker && gofmt -l . && go vet ./...   # Go format check + vet
+pnpm verify  # lint + typecheck + backend/Go tests + production builds
 ```
 
-Linting is enforced in CI (`.github/workflows/ci.yml`, `lint` job): ESLint for
-the TS/Vue code, plus `gofmt` and `go vet` for the root-worker. The ESLint config
+Run individual gates with `pnpm lint`, `pnpm typecheck`, `pnpm test`, or
+`pnpm build` (`pnpm lint:fix` applies safe ESLint fixes).
+
+CI enforces ESLint, TypeScript/Vue typechecks, backend security tests, Go tests,
+`gofmt`, `go vet`, i18n checks, and production builds. The ESLint config
 (`eslint.config.js`) uses the correctness-focused rules only (Vue `flat/essential`
 + typescript-eslint recommended) and deliberately leaves template formatting to the
 editor.
 
-CI (`.github/workflows/ci.yml`) builds the root-worker, generates the Prisma
-client, bundles the backend with esbuild, and builds the dashboard on every push
-and PR.
+The same canonical backend build is used by local development, CI, source
+installation, and release packaging.
 
 ### Runtime smoke test
 

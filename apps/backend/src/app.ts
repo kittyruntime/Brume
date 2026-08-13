@@ -25,6 +25,11 @@ export function buildApp() {
     const app = Fastify({
         logger: true,
         bodyLimit: 50 * 1024 * 1024, // 50 MB — covers 2 MB chunks with headroom
+        // Production nginx connects over IPv4 loopback. Trust forwarded client
+        // addresses only from loopback peers, so direct clients cannot spoof
+        // req.ip (used by rate limiting and audit logs).
+        trustProxy: (address) =>
+            address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1",
     })
 
     // Disable cross-origin requests — the frontend is served from the same origin.

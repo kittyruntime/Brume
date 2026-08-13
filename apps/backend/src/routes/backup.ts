@@ -7,20 +7,14 @@ import type { Readable } from "node:stream"
 import { Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { prisma } from "@app/database"
-import { isTokenBlacklisted, verifyToken } from "../trpc/auth"
 import { createEncryptedConfigBackup, restoreEncryptedConfigBackup } from "../services/config-backup"
+import { authenticateRequest } from "../utils/request-auth"
 
 const MAX_BACKUP_SIZE = 256 * 1024 * 1024
 
 async function authenticatedAdmin(request: { headers: { authorization?: string } }) {
-  const header = request.headers.authorization
-  if (!header?.startsWith("Bearer ")) return null
-  try {
-    const token = verifyToken(header.slice(7))
-    if (isTokenBlacklisted(token.jti)) return null
-    const user = await prisma.user.findUnique({ where: { id: token.userId }, select: { isAdmin: true } })
-    return user?.isAdmin ? token.userId : null
-  } catch { return null }
+  const user = await authenticateRequest(request)
+  return user?.isAdmin ? user.userId : null
 }
 
 export async function backupRoutes(app: FastifyInstance) {

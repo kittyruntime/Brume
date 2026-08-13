@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // ── Path validation ───────────────────────────────────────────────────────────
@@ -100,6 +102,43 @@ func validatePathsScoped(root string, paths ...string) *fsError {
 	return nil
 }
 
+// rejectSymlinkComponents verifies that every existing component below root is
+// a real directory/file rather than a symbolic link. resolveExisting(root)
+// deliberately allows the configured Place root itself to be a symlink, but no
+// archive entry beneath it may redirect extraction outside that root.
+func rejectSymlinkComponents(root, target string) error {
+	cleanRoot := filepath.Clean(root)
+	cleanTarget := filepath.Clean(target)
+	rel, err := filepath.Rel(cleanRoot, cleanTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path escapes destination root")
+	}
+	if rel == "." {
+		return nil
+	}
+
+	realRoot, err := resolveExisting(cleanRoot)
+	if err != nil {
+		return err
+	}
+	cur := realRoot
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		cur = filepath.Join(cur, component)
+		info, statErr := os.Lstat(cur)
+		if os.IsNotExist(statErr) {
+			// Once a component is absent, no deeper component can exist yet.
+			return nil
+		}
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", errRefuseSymlink, cur)
+		}
+	}
+	return nil
+}
+
 // ── Error mapping ─────────────────────────────────────────────────────────────
 
 type fsError struct {
@@ -109,7 +148,18 @@ type fsError struct {
 
 func (e *fsError) Error() string { return e.Message }
 
+var (
+	errRefuseSymlink     = errors.New("refusing to follow symbolic link")
+	errUnsupportedFsType = errors.New("unsupported filesystem entry type")
+)
+
 func mapOsErr(err error) *fsError {
+	if errors.Is(err, errRefuseSymlink) {
+		return &fsError{Code: "EACCES", Message: err.Error()}
+	}
+	if errors.Is(err, errUnsupportedFsType) {
+		return &fsError{Code: "ERR", Message: err.Error()}
+	}
 	var pathErr *fs.PathError
 	var linkErr *os.LinkError
 	var errno syscall.Errno
@@ -121,9 +171,11 @@ func mapOsErr(err error) *fsError {
 		if e, ok := linkErr.Err.(syscall.Errno); ok {
 			errno = e
 		}
+	} else if errors.As(err, &errno) {
+		// Direct syscall/xattr errors are not wrapped in PathError.
 	}
 	switch errno {
-	case syscall.EACCES, syscall.EPERM:
+	case syscall.EACCES, syscall.EPERM, syscall.ELOOP:
 		return &fsError{Code: "EACCES", Message: "permission denied"}
 	case syscall.ENOENT:
 		return &fsError{Code: "ENOENT", Message: "no such file or directory"}
@@ -353,54 +405,113 @@ func copyAll(src, dst string) error {
 	if err != nil {
 		return err
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s", errRefuseSymlink, src)
+	}
 	if info.IsDir() {
 		return copyDir(src, dst, info)
 	}
-	return copyFile(src, dst, info)
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: %s", errUnsupportedFsType, src)
+	}
+	return copyFile(src, dst)
 }
 
-func copyFile(src, dst string, info fs.FileInfo) error {
-	in, err := os.Open(src)
+func copyFile(src, dst string) error {
+	// O_NOFOLLOW closes the race where a checked regular file is swapped for a
+	// symlink before it is opened. Without it, a link nested in an allowed Place
+	// could disclose the contents of an arbitrary file outside that Place.
+	in, err := os.OpenFile(src, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	info, err := in.Stat()
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: %s", errUnsupportedFsType, src)
+	}
+	// The destination selected by uniqueDst must not exist. O_EXCL avoids a
+	// check/open race and O_NOFOLLOW prevents overwriting through a planted link.
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, info.Mode().Perm())
+	if err != nil {
 		return err
 	}
-	return out.Close()
+	completed := false
+	defer func() {
+		if !completed {
+			_ = out.Close()
+			_ = os.Remove(dst)
+		}
+	}()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	completed = true
+	return nil
 }
 
 func copyDir(src, dst string, info fs.FileInfo) error {
-	if err := os.MkdirAll(dst, info.Mode()); err != nil {
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s", errRefuseSymlink, src)
+	}
+	// Open the source directory itself without following a last-component link.
+	// ReadDir on the descriptor also keeps the directory stable while enumerating.
+	in, err := os.OpenFile(src, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
 		return err
 	}
-	entries, err := os.ReadDir(src)
+	defer in.Close()
+	actual, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	if !actual.IsDir() {
+		return fmt.Errorf("%w: %s", errUnsupportedFsType, src)
+	}
+	// dst is chosen as a non-existent unique path. Mkdir (not MkdirAll) fails
+	// safely if another process plants a file/link between selection and create.
+	if err := os.Mkdir(dst, actual.Mode().Perm()); err != nil {
+		return err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = os.RemoveAll(dst)
+		}
+	}()
+	entries, err := in.ReadDir(-1)
 	if err != nil {
 		return err
 	}
 	for _, e := range entries {
 		s := filepath.Join(src, e.Name())
 		d := filepath.Join(dst, e.Name())
-		ei, err := e.Info()
+		ei, err := os.Lstat(s)
 		if err != nil {
 			return err
 		}
-		if e.IsDir() {
+		if ei.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", errRefuseSymlink, s)
+		}
+		if ei.IsDir() {
 			if err := copyDir(s, d, ei); err != nil {
 				return err
 			}
-		} else {
-			if err := copyFile(s, d, ei); err != nil {
+		} else if ei.Mode().IsRegular() {
+			if err := copyFile(s, d); err != nil {
 				return err
 			}
+		} else {
+			return fmt.Errorf("%w: %s", errUnsupportedFsType, s)
 		}
 	}
+	completed = true
 	return nil
 }
 
@@ -545,6 +656,120 @@ func doChown(path, ownerStr, groupStr string) *fsError {
 
 // ── zip ───────────────────────────────────────────────────────────────────────
 
+func addZipRegular(zw *zip.Writer, archiveName, srcPath string) error {
+	in, err := os.OpenFile(srcPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return err
+	}
+	info, err := in.Stat()
+	if err != nil {
+		in.Close()
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		in.Close()
+		return fmt.Errorf("%w: %s", errUnsupportedFsType, srcPath)
+	}
+	w, err := zw.Create(filepath.ToSlash(archiveName))
+	if err != nil {
+		in.Close()
+		return err
+	}
+	_, copyErr := io.Copy(w, in)
+	closeErr := in.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+type replacementMetadata struct {
+	mode      os.FileMode
+	uid       int
+	gid       int
+	existing  bool
+	accessACL []byte
+}
+
+const workerCreateMask os.FileMode = 0002
+
+// replacementPolicy determines the final mode before an atomic rename. For an
+// existing target it also opens the target for writing (without following a
+// symlink), preserving the old permission boundary and its extended ACL/xattr
+// metadata. New files use a fixed application policy filtered through umask.
+func replacementPolicy(target string, newMode os.FileMode) (replacementMetadata, error) {
+	existing, err := os.OpenFile(target, os.O_WRONLY|syscall.O_NOFOLLOW, 0)
+	if err == nil {
+		defer existing.Close()
+		info, statErr := existing.Stat()
+		if statErr != nil {
+			return replacementMetadata{}, statErr
+		}
+		if !info.Mode().IsRegular() {
+			return replacementMetadata{}, fmt.Errorf("%w: %s", errUnsupportedFsType, target)
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return replacementMetadata{}, fmt.Errorf("could not read owner metadata for %s", target)
+		}
+		accessACL, aclErr := readOptionalXattr(int(existing.Fd()), "system.posix_acl_access")
+		if aclErr != nil {
+			return replacementMetadata{}, aclErr
+		}
+		return replacementMetadata{
+			mode: info.Mode().Perm(), uid: int(stat.Uid), gid: int(stat.Gid),
+			existing: true, accessACL: accessACL,
+		}, nil
+	}
+	if !os.IsNotExist(err) {
+		return replacementMetadata{}, err
+	}
+	return replacementMetadata{mode: newMode.Perm() &^ workerCreateMask}, nil
+}
+
+func readOptionalXattr(fd int, name string) ([]byte, error) {
+	size, err := unix.Fgetxattr(fd, name, nil)
+	if err != nil {
+		if errors.Is(err, syscall.ENODATA) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	value := make([]byte, size)
+	if size == 0 {
+		return value, nil
+	}
+	n, err := unix.Fgetxattr(fd, name, value)
+	if err != nil {
+		return nil, err
+	}
+	return value[:n], nil
+}
+
+func applyReplacementMetadata(file *os.File, metadata replacementMetadata) error {
+	if metadata.existing {
+		// Atomic replacement must retain the old inode's ownership. If the
+		// impersonated caller cannot preserve it, fail instead of silently
+		// transferring ownership to the caller. Do not copy security.* xattrs:
+		// in-place writes would invalidate capabilities/signatures as well.
+		if err := file.Chown(metadata.uid, metadata.gid); err != nil {
+			return err
+		}
+		if metadata.accessACL != nil {
+			if err := unix.Fsetxattr(int(file.Fd()), "system.posix_acl_access", metadata.accessACL, 0); err != nil {
+				return err
+			}
+		} else if err := unix.Fremovexattr(int(file.Fd()), "system.posix_acl_access"); err != nil &&
+			!errors.Is(err, syscall.ENODATA) && !errors.Is(err, syscall.ENOTSUP) && !errors.Is(err, syscall.EOPNOTSUPP) {
+			return err
+		}
+	}
+	if err := file.Chmod(metadata.mode); err != nil {
+		return err
+	}
+	return nil
+}
+
 func doZip(paths []string, destDir, name string) *fsError {
 	// Reject any name that tries to escape destDir via separators or dot-segments.
 	clean := filepath.Base(filepath.Clean(name))
@@ -557,59 +782,100 @@ func doZip(paths []string, destDir, name string) *fsError {
 		return mapOsErr(err)
 	}
 	zipPath := filepath.Join(destDir, name)
-	f, err := os.Create(zipPath)
+	if err := rejectSymlinkComponents(destDir, zipPath); err != nil {
+		return mapOsErr(err)
+	}
+	_, err := replacementPolicy(zipPath, 0666)
 	if err != nil {
 		return mapOsErr(err)
 	}
-	defer f.Close()
-
+	// Build beside the final path and only replace it after the whole archive is
+	// valid. This preserves an existing archive when a source fails part-way and
+	// also keeps `zipPath` readable when it is itself one of the selected files.
+	f, err := os.CreateTemp(destDir, ".hsi-zip-*.tmp")
+	if err != nil {
+		return mapOsErr(err)
+	}
+	tmpPath := f.Name()
 	zw := zip.NewWriter(f)
-	defer zw.Close()
+	fail := func(err error) *fsError {
+		_ = zw.Close()
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
+	}
 
 	for _, src := range paths {
 		info, err := os.Lstat(src)
 		if err != nil {
-			return mapOsErr(err)
+			return fail(err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fail(fmt.Errorf("%w: %s", errRefuseSymlink, src))
 		}
 		parentDir := filepath.Dir(src)
 		if info.IsDir() {
 			if walkErr := filepath.Walk(src, func(walkPath string, fi fs.FileInfo, err error) error {
-				if err != nil || fi.IsDir() {
+				if err != nil {
 					return err
+				}
+				if fi.Mode()&os.ModeSymlink != 0 {
+					return fmt.Errorf("%w: %s", errRefuseSymlink, walkPath)
+				}
+				if fi.IsDir() {
+					return nil
+				}
+				if !fi.Mode().IsRegular() {
+					return fmt.Errorf("%w: %s", errUnsupportedFsType, walkPath)
+				}
+				// If the temporary output lives inside a selected directory, never
+				// recursively add the archive while it is being written. Preserve the
+				// historical behaviour of excluding an existing final archive too.
+				if filepath.Clean(walkPath) == filepath.Clean(tmpPath) ||
+					filepath.Clean(walkPath) == filepath.Clean(zipPath) {
+					return nil
 				}
 				rel, err := filepath.Rel(parentDir, walkPath)
 				if err != nil {
 					return err
 				}
-				w, err := zw.Create(rel)
-				if err != nil {
-					return err
-				}
-				in, err := os.Open(walkPath)
-				if err != nil {
-					return err
-				}
-				defer in.Close()
-				_, err = io.Copy(w, in)
-				return err
+				return addZipRegular(zw, rel, walkPath)
 			}); walkErr != nil {
-				return mapOsErr(walkErr)
+				return fail(walkErr)
+			}
+		} else if info.Mode().IsRegular() {
+			if err := addZipRegular(zw, filepath.Base(src), src); err != nil {
+				return fail(err)
 			}
 		} else {
-			w, err := zw.Create(filepath.Base(src))
-			if err != nil {
-				return mapOsErr(err)
-			}
-			in, err := os.Open(src)
-			if err != nil {
-				return mapOsErr(err)
-			}
-			if _, err := io.Copy(w, in); err != nil {
-				in.Close()
-				return mapOsErr(err)
-			}
-			in.Close()
+			return fail(fmt.Errorf("%w: %s", errUnsupportedFsType, src))
 		}
+	}
+	if err := zw.Close(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
+	}
+	metadata, err := replacementPolicy(zipPath, 0666)
+	if err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
+	}
+	if err := applyReplacementMetadata(f, metadata); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
+	}
+	// Rename replaces a regular final file atomically without ever following it.
+	// The earlier component check retains the API's explicit symlink rejection.
+	if err := os.Rename(tmpPath, zipPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return mapOsErr(err)
 	}
 	return nil
 }
@@ -672,6 +938,9 @@ func doZipToTemp(srcPath string) (string, int64, *fsError) {
 	if err != nil {
 		return "", 0, mapOsErr(err)
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", 0, mapOsErr(fmt.Errorf("%w: %s", errRefuseSymlink, srcPath))
+	}
 	if !info.IsDir() {
 		return "", 0, &fsError{Code: "ERR", Message: "not a directory"}
 	}
@@ -682,15 +951,22 @@ func doZipToTemp(srcPath string) (string, int64, *fsError) {
 	// guarantee against filling the disk is the guardedWriter below, which
 	// re-checks actual free space as it writes.
 	var total int64
-	if walkErr := filepath.Walk(srcPath, func(_ string, fi fs.FileInfo, err error) error {
+	if walkErr := filepath.Walk(srcPath, func(walkPath string, fi fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if fi.Mode().IsRegular() {
-			total += fi.Size()
-			if total > shareZipMaxInput {
-				return errZipTooBig
-			}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", errRefuseSymlink, walkPath)
+		}
+		if fi.IsDir() {
+			return nil
+		}
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("%w: %s", errUnsupportedFsType, walkPath)
+		}
+		total += fi.Size()
+		if total > shareZipMaxInput {
+			return errZipTooBig
 		}
 		return nil
 	}); walkErr != nil {
@@ -724,27 +1000,23 @@ func doZipToTemp(srcPath string) (string, int64, *fsError) {
 
 	parentDir := filepath.Dir(srcPath)
 	if walkErr := filepath.Walk(srcPath, func(walkPath string, fi fs.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
 			return err
 		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", errRefuseSymlink, walkPath)
+		}
+		if fi.IsDir() {
+			return nil
+		}
 		if !fi.Mode().IsRegular() {
-			return nil // skip symlinks/devices — never follow them into the archive
+			return fmt.Errorf("%w: %s", errUnsupportedFsType, walkPath)
 		}
 		rel, err := filepath.Rel(parentDir, walkPath)
 		if err != nil {
 			return err
 		}
-		w, err := zw.Create(rel)
-		if err != nil {
-			return err
-		}
-		in, err := os.Open(walkPath)
-		if err != nil {
-			return err
-		}
-		defer in.Close()
-		_, err = io.Copy(w, in)
-		return err
+		return addZipRegular(zw, rel, walkPath)
 	}); walkErr != nil {
 		if gw.spaceErr != nil {
 			return fail(&fsError{Code: "NOSPC", Message: "ran out of temporary disk space while building the archive"})
@@ -802,23 +1074,106 @@ func sweepShareTemps(maxAge time.Duration) {
 // ── unzip ─────────────────────────────────────────────────────────────────────
 
 func doUnzip(archivePath, destDir string) *fsError {
-	r, err := zip.OpenReader(archivePath)
+	archive, err := os.OpenFile(archivePath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return mapOsErr(err)
 	}
-	defer r.Close()
+	defer archive.Close()
+	archiveInfo, err := archive.Stat()
+	if err != nil {
+		return mapOsErr(err)
+	}
+	if !archiveInfo.Mode().IsRegular() {
+		return mapOsErr(fmt.Errorf("%w: %s", errUnsupportedFsType, archivePath))
+	}
+	r, err := zip.NewReader(archive, archiveInfo.Size())
+	if err != nil {
+		return mapOsErr(err)
+	}
 
-	cleanDest := filepath.Clean(destDir) + string(filepath.Separator)
+	type validatedEntry struct {
+		file      *zip.File
+		entryPath string
+		target    string
+		isDir     bool
+	}
+	entries := make([]validatedEntry, 0, len(r.File))
+	kinds := make(map[string]bool, len(r.File)) // true = directory
+	requiredDirs := map[string]bool{".": true}
+	files := make(map[string]bool, len(r.File))
 
 	for _, f := range r.File {
-		// Prevent zip-slip: reject any path that escapes destDir
-		target := filepath.Join(destDir, filepath.Clean("/"+f.Name))
-		if target != filepath.Clean(destDir) && !strings.HasPrefix(target, cleanDest) {
+		// Validate every entry before creating or replacing anything. A malformed
+		// late entry must not leave earlier files partially extracted.
+		if strings.ContainsRune(f.Name, 0) {
+			return &fsError{Code: "ERR", Message: "zip entry contains a null byte"}
+		}
+		entryPath := filepath.Clean(filepath.FromSlash(f.Name))
+		if filepath.IsAbs(entryPath) || entryPath == ".." || strings.HasPrefix(entryPath, ".."+string(filepath.Separator)) {
 			return &fsError{Code: "ERR", Message: "zip entry escapes destination: " + f.Name}
 		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return mapOsErr(fmt.Errorf("%w: archive entry %s", errRefuseSymlink, f.Name))
+		}
+		isDir := f.FileInfo().IsDir()
+		if !isDir && !f.Mode().IsRegular() {
+			return mapOsErr(fmt.Errorf("%w: archive entry %s", errUnsupportedFsType, f.Name))
+		}
+		if entryPath == "." && !isDir {
+			return &fsError{Code: "ERR", Message: "invalid zip entry: " + f.Name}
+		}
+		if priorKind, exists := kinds[entryPath]; exists {
+			if priorKind != isDir || !isDir {
+				return &fsError{Code: "ERR", Message: "conflicting zip entry: " + f.Name}
+			}
+			continue
+		}
+		for parent := filepath.Dir(entryPath); parent != "."; parent = filepath.Dir(parent) {
+			if files[parent] {
+				return &fsError{Code: "ERR", Message: "zip entry has a file as parent: " + f.Name}
+			}
+			requiredDirs[parent] = true
+		}
+		if isDir {
+			if files[entryPath] {
+				return &fsError{Code: "ERR", Message: "conflicting zip entry: " + f.Name}
+			}
+		} else {
+			if requiredDirs[entryPath] {
+				return &fsError{Code: "ERR", Message: "zip entry conflicts with a directory: " + f.Name}
+			}
+			files[entryPath] = true
+		}
+		kinds[entryPath] = isDir
+		target := filepath.Join(destDir, entryPath)
+		if err := rejectSymlinkComponents(destDir, target); err != nil {
+			return mapOsErr(err)
+		}
+		if current, statErr := os.Lstat(target); statErr == nil {
+			if current.Mode()&os.ModeSymlink != 0 {
+				return mapOsErr(fmt.Errorf("%w: %s", errRefuseSymlink, target))
+			}
+			if isDir != current.IsDir() || (!isDir && !current.Mode().IsRegular()) {
+				return mapOsErr(fmt.Errorf("%w: %s", errUnsupportedFsType, target))
+			}
+		} else if !os.IsNotExist(statErr) {
+			return mapOsErr(statErr)
+		}
+		if !isDir {
+			// Preflight the same permission check used immediately before commit.
+			// A writable parent alone must not permit replacing a read-only file.
+			if _, err := replacementPolicy(target, f.Mode().Perm()&0775); err != nil {
+				return mapOsErr(err)
+			}
+		}
+		entries = append(entries, validatedEntry{file: f, entryPath: entryPath, target: target, isDir: isDir})
+	}
 
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, f.Mode()|0111); err != nil {
+	for _, entry := range entries {
+		f := entry.file
+		target := entry.target
+		if entry.isDir {
+			if err := os.MkdirAll(target, f.Mode().Perm()|0111); err != nil {
 				return mapOsErr(err)
 			}
 			continue
@@ -827,24 +1182,56 @@ func doUnzip(archivePath, destDir string) *fsError {
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return mapOsErr(err)
 		}
-
-		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
+		// Re-check after MkdirAll, then use O_NOFOLLOW for the final component.
+		if err := rejectSymlinkComponents(destDir, target); err != nil {
 			return mapOsErr(err)
 		}
 
 		rc, err := f.Open()
 		if err != nil {
-			out.Close()
 			return mapOsErr(err)
 		}
+		out, err := os.CreateTemp(filepath.Dir(target), ".hsi-unzip-*.tmp")
+		if err != nil {
+			rc.Close()
+			return mapOsErr(err)
+		}
+		tmpPath := out.Name()
 
 		_, copyErr := io.Copy(out, rc)
-		out.Close()
-		rc.Close()
-
+		rcCloseErr := rc.Close()
 		if copyErr != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpPath)
 			return mapOsErr(copyErr)
+		}
+		if rcCloseErr != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpPath)
+			return mapOsErr(rcCloseErr)
+		}
+		metadata, metadataErr := replacementPolicy(target, f.Mode().Perm()&0775)
+		if metadataErr != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpPath)
+			return mapOsErr(metadataErr)
+		}
+		if err := applyReplacementMetadata(out, metadata); err != nil {
+			_ = out.Close()
+			_ = os.Remove(tmpPath)
+			return mapOsErr(err)
+		}
+		if err := out.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			return mapOsErr(err)
+		}
+		if err := rejectSymlinkComponents(destDir, target); err != nil {
+			_ = os.Remove(tmpPath)
+			return mapOsErr(err)
+		}
+		if err := os.Rename(tmpPath, target); err != nil {
+			_ = os.Remove(tmpPath)
+			return mapOsErr(err)
 		}
 	}
 	return nil

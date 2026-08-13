@@ -891,7 +891,7 @@ func main() {
 	// Group-writable by default: files created 0664, dirs 0775, so content in a
 	// setgid share dir (group hsi-share) is writable by any write-user. Explicit
 	// perms elsewhere (0644 config files) are unaffected — a mask only clears bits.
-	syscall.Umask(0o002)
+	syscall.Umask(int(workerCreateMask))
 
 	natsURL := getenv("NATS_URL", "nats://127.0.0.1:4222")
 	natsUser := getenv("NATS_USER", "worker")

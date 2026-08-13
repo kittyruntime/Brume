@@ -3,12 +3,23 @@
   "version": "1.48.0",
   "description": "A modern home server dashboard for self-hosting apps, media and storage.",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "pnpm": ">=10.18.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "pnpm test:backend && pnpm test:worker",
+    "test:backend": "pnpm --filter @app/backend test",
+    "test:worker": "cd apps/root-worker && go test ./...",
+    "pretypecheck": "pnpm --filter @app/database db:generate",
+    "typecheck": "pnpm --filter @app/database exec tsc --noEmit && pnpm --filter @app/backend exec tsc --noEmit && pnpm --filter @app/dashboard exec vue-tsc -b",
+    "smoke:backend": "node scripts/smoke-backend.mjs",
+    "check:go": "test -z \"$(gofmt -l apps/root-worker)\" && cd apps/root-worker && go vet ./...",
+    "verify": "pnpm lint && scripts/check-i18n.sh && pnpm check:go && pnpm typecheck && pnpm test && pnpm build && pnpm smoke:backend",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "dev": "pnpm -r dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @app/backend build && pnpm --filter @app/dashboard build",
     "start": "pnpm -r start"
   },
   "keywords": [],
@@ -23,7 +34,8 @@
       "esbuild"
     ],
     "overrides": {
-      "tsx": "^4.23.0"
+      "brace-expansion": "5.0.9",
+      "tsx": "4.23.12"
     }
   },
   "devDependencies": {

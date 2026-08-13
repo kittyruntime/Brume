@@ -1,28 +1,10 @@
 import type { FastifyInstance } from "fastify"
 import crypto from "node:crypto"
 import { StringCodec } from "nats"
-import { verifyToken, isTokenBlacklisted } from "../trpc/auth"
-import { prisma } from "@app/database"
 import { requestSync, natsSubscribe } from "../nats"
+import { authenticateRequest } from "../utils/request-auth"
 
 const sc = StringCodec()
-
-function authFromRequest(req: { headers: { authorization?: string } }) {
-  const h = req.headers.authorization
-  if (!h?.startsWith("Bearer ")) return null
-  try {
-    const payload = verifyToken(h.slice(7))
-    if (isTokenBlacklisted(payload.jti)) return null
-    return payload
-  } catch {
-    return null
-  }
-}
-
-async function canViewContainers(userId: string): Promise<boolean> {
-  const u = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } })
-  return !!u?.isAdmin
-}
 
 export async function containerRoutes(app: FastifyInstance) {
   // GET /containers/:name/logs
@@ -31,13 +13,13 @@ export async function containerRoutes(app: FastifyInstance) {
   // Auth via Authorization: Bearer <jwt>.
   // Each SSE event is JSON: {"line":"..."} or {"done":true} on end.
   app.get("/containers/:name/logs", { config: { rateLimit: false } }, async (req, reply) => {
-    const user = authFromRequest(req)
+    const user = await authenticateRequest(req)
     if (!user) {
       reply.status(401).send("Unauthorized")
       return
     }
 
-    if (!user.isAdmin && !(await canViewContainers(user.userId))) {
+    if (!user.isAdmin) {
       reply.status(403).send("Forbidden")
       return
     }

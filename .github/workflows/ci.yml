@@ -30,7 +30,10 @@ jobs:
           cache: false
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release runtime lock
+        run: npm ci --prefix runtime --omit=dev --ignore-scripts --no-audit --no-fund
 
       - name: Lint (ESLint)
         run: pnpm lint
@@ -38,18 +41,14 @@ jobs:
       - name: Check UI strings are English
         run: scripts/check-i18n.sh
 
-      - name: Check Go formatting
-        run: |
-          cd apps/root-worker
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "These files are not gofmt-formatted:"
-            echo "$unformatted"
-            exit 1
-          fi
+      - name: Check and vet Go
+        run: pnpm check:go
 
-      - name: Vet Go
-        run: cd apps/root-worker && go vet ./...
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test backend and root-worker
+        run: pnpm test
 
   build:
     runs-on: ubuntu-latest
@@ -70,30 +69,13 @@ jobs:
           cache: false
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm build
 
       - name: Build root-worker
-        run: |
-          cd apps/root-worker
-          go build -o root-worker .
+        run: cd apps/root-worker && CGO_ENABLED=0 go build -o root-worker .
 
-      - name: Generate Prisma client
-        run: cd packages/database && npx prisma generate
-
-      - name: Build backend
-        run: |
-          cd apps/backend
-          pnpm dlx esbuild src/server.ts \
-            --bundle \
-            --platform=node \
-            --target=node18 \
-            --format=esm \
-            --outfile=dist/server.js \
-            --external:@prisma/client \
-            --external:@prisma/engines \
-            --external:fsevents \
-            --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);" \
-            --log-level=warning
-
-      - name: Build dashboard
-        run: pnpm --filter @app/dashboard run build
+      - name: Smoke-test backend artifact
+        run: pnpm smoke:backend

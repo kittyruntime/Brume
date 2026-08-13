@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "DASHBOARD_PATH=../dashboard/dist vite-node src/server.ts",
-    "build": "tsc",
+    "prebuild": "pnpm --filter @app/database db:generate",
+    "build": "esbuild src/server.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/server.js --external:@prisma/client --external:@prisma/engines --external:fsevents --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" --log-level=warning",
+    "pretypecheck": "pnpm --filter @app/database db:generate",
+    "typecheck": "tsc --noEmit",
+    "test": "vite-node src/tests/run.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
     "@app/app-catalog": "workspace:*",
     "@app/database": "workspace:*",
     "@app/shared-types": "workspace:*",
+    "@prisma/client": "^6.19.3",
     "@fastify/cors": "^11.2.0",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^10.1.2",
@@ -27,6 +32,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.10"
+    "@types/jsonwebtoken": "^9.0.10",
+    "esbuild": "0.28.1"
   }
 }
