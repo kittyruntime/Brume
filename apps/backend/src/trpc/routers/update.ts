@@ -13,6 +13,24 @@ function installDir(): string {
   return path.resolve(dirname, "../../../../..")
 }
 
+// install.sh chowns INSTALL_DIR/database/data to the app user but leaves
+// INSTALL_DIR itself root-owned (0755) once the release install/update flow
+// has run. The backend runs unprivileged, so the pending-update marker must
+// live somewhere it can actually create a file — database/data is the one
+// directory install.sh guarantees it owns. Mirrored in scripts/install.sh
+// (stale-marker cleanup, the update-apply path unit and its service).
+//
+// The release tarball flattens the monorepo (database/ sits directly under
+// INSTALL_DIR); in the dev checkout the same data dir is nested under
+// packages/. INSTALL_DIR is only set in production, so its presence tells
+// us which layout applies.
+function pendingUpdateFile(): string {
+  const dbDataDir = process.env.INSTALL_DIR
+    ? path.join(installDir(), "database", "data")
+    : path.join(installDir(), "packages", "database", "data")
+  return path.join(dbDataDir, ".pending-update")
+}
+
 function readCurrentVersion(): string {
   const vf = path.join(installDir(), "VERSION")
   if (fs.existsSync(vf)) return fs.readFileSync(vf, "utf8").trim()
@@ -46,7 +64,7 @@ export const updateRouter = router({
   status: adminProcedure.query(() => {
     const current  = readCurrentVersion()
     const check    = readCheck()
-    const pending  = fs.existsSync(path.join(installDir(), ".pending-update"))
+    const pending  = fs.existsSync(pendingUpdateFile())
     const hasUpdate = check ? isNewer(check.latestVersion, current) : false
     return {
       current,
@@ -82,7 +100,7 @@ export const updateRouter = router({
   apply: adminProcedure
     .input(z.object({ version: z.string().regex(/^v\d+\.\d+\.\d+$/) }))
     .mutation(({ input }) => {
-      fs.writeFileSync(path.join(installDir(), ".pending-update"), input.version, "utf8")
+      fs.writeFileSync(pendingUpdateFile(), input.version, "utf8")
       return { ok: true }
     }),
 

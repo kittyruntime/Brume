@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Broken update trigger**: `install.sh` locks `INSTALL_DIR` itself down to root ownership,
+  but the unprivileged backend wrote the pending-update marker directly into it, failing with
+  `EACCES: permission denied, open '.../.pending-update'` whenever an admin applied an update
+  from the dashboard. The marker now lives in `database/data`, the one directory install.sh
+  guarantees the app user owns — the update-apply systemd path unit and service, and the
+  legacy-migration stale-marker cleanup, were updated to match.
+
 ## [1.50.0] - 2026-08-20
 
 ### Added

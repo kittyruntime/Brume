@@ -203,8 +203,10 @@ migrate_legacy_app_install() {
 
     # A queued update marker must not survive the move: the new
     # hsi-update-apply.path fires the instant it is enabled if the file
-    # exists, launching a second concurrent install.
-    rm -f /opt/hsi/.pending-update
+    # exists, launching a second concurrent install. Both the pre- and
+    # post-move marker locations are cleared since older installs wrote it
+    # at the install root before that path became unwritable by the app user.
+    rm -f /opt/hsi/.pending-update /opt/hsi/database/data/.pending-update
     mlog "stale .pending-update removed"
   fi
 
@@ -980,7 +982,7 @@ Environment=BACKEND_PORT=${BACKEND_PORT}
 Environment=NATS_SERVER_VERSION=${NATS_SERVER_VERSION}
 Environment=SKIP_NGINX=${SKIP_NGINX}
 Environment=SKIP_SEED=${SKIP_SEED}
-ExecStart=:/bin/bash -c 'set -e; v=\$(cat "\$INSTALL_DIR/.pending-update"); tmp=\$(mktemp); trap "rm -f \$tmp" EXIT; curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh -o \$tmp; VERSION=\$v bash \$tmp; rm -f "\$INSTALL_DIR/.pending-update"'
+ExecStart=:/bin/bash -c 'set -e; v=\$(cat "${DB_DIR}/.pending-update"); tmp=\$(mktemp); trap "rm -f \$tmp" EXIT; curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh -o \$tmp; VERSION=\$v bash \$tmp; rm -f "${DB_DIR}/.pending-update"'
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${APP_NAME}-update
@@ -991,7 +993,7 @@ EOF
 Description=Watch for pending ${APP_NAME} update
 
 [Path]
-PathExists=${INSTALL_DIR}/.pending-update
+PathExists=${DB_DIR}/.pending-update
 
 [Install]
 WantedBy=multi-user.target
