@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-08-20
+
 ### Added
 - **RAID level diagrams**: the "create RAID" wizard now shows a small block-distribution
   diagram for each level (striping, mirroring, parity, mirror+stripe) alongside its
@@ -798,7 +800,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.49.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.0...HEAD
+[1.50.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.49.0...v1.50.0
 [1.49.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.1...v1.49.0
 [1.48.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.0...v1.48.1
 [1.48.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.47.0...v1.48.0
