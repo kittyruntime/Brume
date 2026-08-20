@@ -661,7 +661,13 @@ onMounted(async () => {
 
         <!-- Empty directory (and no uploads in progress) -->
         <div v-else-if="entries.length === 0 && activeUploads.length === 0" class="flex items-center justify-center h-full text-[var(--c-text-3)] select-none">
-          <p class="text-sm">Empty directory</p>
+          <div class="text-center space-y-2">
+            <svg class="w-10 h-10 mx-auto opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            <p class="text-sm">This folder is empty.</p>
+            <p class="text-xs">Drag files here, or use <strong class="text-[var(--c-text-2)]">Upload</strong> / <strong class="text-[var(--c-text-2)]">New folder</strong> above.</p>
+          </div>
         </div>
 
         <!-- Has entries (or uploads in progress) -->

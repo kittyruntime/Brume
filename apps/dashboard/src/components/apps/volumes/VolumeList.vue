@@ -7,6 +7,7 @@ import { useToast } from '../../../lib/toast'
 const toast = useToast()
 import EmptyState from '../../ui/EmptyState.vue'
 import LoadingSpinner from '../../ui/LoadingSpinner.vue'
+import Hint from '../../ui/Hint.vue'
 
 const { confirm } = useConfirm()
 
@@ -89,7 +90,10 @@ function typeLabel(t: string) {
             class="w-full bg-[var(--c-surface-alt)] border border-[var(--c-border-strong)] rounded-lg px-2 py-1.5 text-sm text-[var(--c-text-1)] focus:outline-none focus:border-[var(--c-accent)]" />
         </div>
         <div class="space-y-1.5">
-          <label class="text-xs text-[var(--c-text-3)]">Type</label>
+          <label class="flex items-center gap-1.5 text-xs text-[var(--c-text-3)]">
+            Type
+            <Hint text="Named volumes are managed by Docker and are the safest default. Path binds mount a specific server folder. Place links the volume to an existing Place." />
+          </label>
           <select v-model="form.volumeType"
             class="w-full bg-[var(--c-surface-alt)] border border-[var(--c-border-strong)] rounded-lg px-2 py-1.5 text-sm text-[var(--c-text-1)] focus:outline-none focus:border-[var(--c-accent)]">
             <option value="named">Named (container-managed)</option>
@@ -117,7 +121,11 @@ function typeLabel(t: string) {
     <div class="flex-1 overflow-y-auto">
       <div v-if="loading" class="flex items-center justify-center h-40 text-[var(--c-text-3)] text-sm"><LoadingSpinner /></div>
       <div v-else-if="volumes.length === 0 && !adding" class="flex items-center justify-center h-40">
-        <EmptyState message="No volumes yet." />
+        <EmptyState message="No volumes yet." description="Create a volume to persist container data.">
+          <template #action>
+            <button class="btn btn-primary btn-sm" @click="adding = true">Create volume</button>
+          </template>
+        </EmptyState>
       </div>
       <div v-else-if="volumes.length > 0">
       <div class="space-y-2 p-3 sm:hidden"><article v-for="vol in volumes" :key="vol.id" class="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] p-3"><div class="flex items-center justify-between gap-2"><strong class="truncate font-mono text-sm text-[var(--c-text-1)]">{{vol.name}}</strong><button @click="deleteVolume(vol.id)" class="touch-target grid place-items-center rounded-lg text-danger" :aria-label="`Delete volume ${vol.name}`">×</button></div><p class="mt-1 text-xs text-[var(--c-text-3)]">{{typeLabel(vol.volumeType)}}</p><p class="mt-2 truncate font-mono text-xs text-[var(--c-text-2)]" :title="vol.sourcePath??vol.placeId??''">{{vol.sourcePath??vol.placeId??'—'}}</p></article></div>

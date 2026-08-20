@@ -153,7 +153,15 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> | nu
     <ErrorState v-else-if="error" :message="error" retry-label="Retry" @retry="load" />
 
     <!-- Empty -->
-    <EmptyState v-else-if="!entries.length" message="No audit entries found." description="Try clearing the action filter." />
+    <EmptyState
+      v-else-if="!entries.length"
+      :message="filterAction ? 'No audit entries match this filter.' : 'No audit entries yet.'"
+      :description="filterAction ? undefined : 'Actions taken by admins and privileged operations will appear here.'"
+    >
+      <template v-if="filterAction" #action>
+        <button class="btn btn-outline btn-sm" @click="filterAction = ''">Clear filter</button>
+      </template>
+    </EmptyState>
 
     <!-- Table -->
     <template v-else>

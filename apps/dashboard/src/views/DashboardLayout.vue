@@ -66,7 +66,7 @@ const activeApp        = ref<string>('dashboard')
 const notifMenuOpen    = ref(false)
 const userMenuOpen     = ref(false)
 const moreMenuOpen     = ref(false)
-const settingsSection  = ref<'profile' | 'users' | 'places' | 'groups' | null>(null)
+const settingsSection  = ref<'profile' | 'users' | 'places' | 'groups' | 'data-backups' | null>(null)
 const appsPanelRef     = ref<InstanceType<typeof AppsPanelT> | null>(null)
 
 const badgeCount = computed(() => notifications.value.length)
@@ -191,6 +191,15 @@ function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value
   notifMenuOpen.value = false
   moreMenuOpen.value = false
+}
+
+function onDashboardNavigate(target: 'places' | 'store' | 'backups') {
+  if (target === 'store') {
+    activeApp.value = 'store'
+    return
+  }
+  activeApp.value = 'settings'
+  settingsSection.value = target === 'places' ? 'places' : 'data-backups'
 }
 
 function goToProfile() {
@@ -438,7 +447,7 @@ onUnmounted(() => {
         <header v-if="activeApp !== 'files'" class="h-11 flex items-center justify-between px-4 sm:px-6 border-b border-[var(--c-border)] flex-shrink-0 bg-[var(--c-surface-alt)]">
           <span class="eyebrow">{{ activeAppLabel }}</span>
           <button
-            v-if="activeApp === 'apps' && isAdmin"
+            v-if="activeApp === 'apps' && isAdmin && appsPanelRef?.active === 'containers'"
             @click="appsPanelRef?.openNew()"
             class="btn btn-primary btn-xs"
           >
@@ -454,7 +463,7 @@ onUnmounted(() => {
         <div :class="['min-w-0 flex-1', activeApp !== 'dashboard' ? 'overflow-hidden' : 'overflow-auto']">
           <Transition name="ui-fade" mode="out-in">
           <div :key="activeApp" class="mobile-density h-full route-fade">
-          <DashboardPanel v-if="activeApp === 'dashboard'" class="h-full" />
+          <DashboardPanel v-if="activeApp === 'dashboard'" class="h-full" @navigate="onDashboardNavigate" />
           <FileBrowserPanel v-else-if="activeApp === 'files'" class="h-full" />
           <AppsPanel v-else-if="activeApp === 'apps'" ref="appsPanelRef" class="h-full" />
           <SettingsPanel v-else-if="activeApp === 'settings'" class="h-full" :focusSection="settingsSection" />

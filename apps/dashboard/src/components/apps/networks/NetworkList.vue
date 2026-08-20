@@ -7,6 +7,7 @@ import { useToast } from '../../../lib/toast'
 const toast = useToast()
 import EmptyState from '../../ui/EmptyState.vue'
 import LoadingSpinner from '../../ui/LoadingSpinner.vue'
+import Hint from '../../ui/Hint.vue'
 
 const { confirm } = useConfirm()
 
@@ -85,7 +86,10 @@ async function deleteNetwork(id: string) {
             class="w-full bg-[var(--c-surface-alt)] border border-[var(--c-border-strong)] rounded-lg px-2 py-1.5 text-sm text-[var(--c-text-1)] focus:outline-none focus:border-[var(--c-accent)]" />
         </div>
         <div class="space-y-1.5">
-          <label class="text-xs text-[var(--c-text-3)]">Driver</label>
+          <label class="flex items-center gap-1.5 text-xs text-[var(--c-text-3)]">
+            Driver
+            <Hint text="Bridge is the default and works for most containers. Use host to share the server's network stack, or macvlan/overlay for advanced setups." />
+          </label>
           <select v-model="form.driver"
             class="w-full bg-[var(--c-surface-alt)] border border-[var(--c-border-strong)] rounded-lg px-2 py-1.5 text-sm text-[var(--c-text-1)] focus:outline-none focus:border-[var(--c-accent)]">
             <option>bridge</option>
@@ -120,7 +124,11 @@ async function deleteNetwork(id: string) {
     <div class="flex-1 overflow-y-auto">
       <div v-if="loading" class="flex items-center justify-center h-40 text-[var(--c-text-3)] text-sm"><LoadingSpinner /></div>
       <div v-else-if="networks.length === 0 && !adding" class="flex items-center justify-center h-40">
-        <EmptyState message="No networks yet." />
+        <EmptyState message="No networks yet." description="Create a network to isolate or connect containers.">
+          <template #action>
+            <button class="btn btn-primary btn-sm" @click="adding = true">Create network</button>
+          </template>
+        </EmptyState>
       </div>
       <div v-else-if="networks.length > 0">
       <div class="space-y-2 p-3 sm:hidden"><article v-for="net in networks" :key="net.id" class="rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] p-3"><div class="flex items-center justify-between gap-2"><strong class="truncate font-mono text-sm text-[var(--c-text-1)]">{{net.name}}</strong><button @click="deleteNetwork(net.id)" class="touch-target grid place-items-center rounded-lg text-danger" :aria-label="`Delete network ${net.name}`">×</button></div><dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs"><dt class="text-[var(--c-text-3)]">Driver</dt><dd>{{net.driver}}</dd><dt class="text-[var(--c-text-3)]">Subnet</dt><dd class="truncate font-mono">{{net.subnet??'—'}}</dd><dt class="text-[var(--c-text-3)]">Gateway</dt><dd class="truncate font-mono">{{net.gateway??'—'}}</dd></dl></article></div>

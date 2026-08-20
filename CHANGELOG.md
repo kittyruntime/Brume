@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Getting started guidance**: a dismissible card on the Dashboard overview walks new admins
+  through adding a Place, installing an app and setting up a backup plan, linking straight to
+  each screen.
+- **Docker Networks and Volumes management**: previously-built screens for creating and removing
+  Docker networks and volumes are now reachable from Apps, alongside Containers.
+- **Inline contextual help**: a reusable, keyboard-accessible hint control explains non-obvious
+  fields (e.g. Docker network driver, volume type) without cluttering the layout.
+
+### Changed
+- **Actionable empty states**: networks, volumes, the audit log, users and groups now offer a
+  direct next step (create, clear filter, clear search) instead of a dead end. The empty-folder
+  state in the file browser now points at Upload and New folder.
+- **Reorganized Settings navigation**: the flat admin section list is now grouped under labeled
+  headings (Access control, System, Backups) instead of one undifferentiated block.
+
+### Fixed
+- **Local dev server routing**: the Vite dev proxy rule for public share links (`/s`) matched by
+  string prefix and unintentionally also intercepted `/src/*`, breaking the dashboard's local dev
+  server. Scoped to `/s/`.
+- **Settings deep links**: opening Settings on a specific tab (e.g. from the getting-started card)
+  always landed on My Profile instead of the requested tab on first open.
+
 ## [1.48.1] - 2026-08-13
 
 ### Security

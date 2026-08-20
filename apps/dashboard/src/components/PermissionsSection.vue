@@ -75,7 +75,7 @@ onMounted(load)
   <section>
     <h3 class="text-xs font-medium uppercase tracking-widest text-[var(--c-text-3)] mb-3 px-1">Permissions</h3>
 
-    <div v-if="places.length === 0" class="text-sm text-[var(--c-text-3)] italic px-1">No places configured.</div>
+    <div v-if="places.length === 0" class="text-sm text-[var(--c-text-3)] px-1">No places yet. Add one in the Places tab, then grant users or groups access here.</div>
 
     <div class="space-y-2">
       <div

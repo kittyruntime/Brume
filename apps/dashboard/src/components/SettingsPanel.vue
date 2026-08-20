@@ -17,32 +17,46 @@ type SectionId = 'profile' | 'users' | 'places' | 'permissions' | 'groups' | 'up
 
 const props = defineProps<{ focusSection?: SectionId | null }>()
 
+type Group = 'access' | 'system' | 'backup'
+
 interface NavItem {
   id: SectionId
   label: string
   show: () => boolean
-  group?: 'admin'
+  group?: Group
+}
+
+const GROUP_LABEL: Record<Group, string> = {
+  access: 'Access control',
+  system: 'System',
+  backup: 'Backups',
 }
 
 const nav: NavItem[] = [
   { id: 'profile',     label: 'My Profile',  show: () => true },
   { id: 'shares',      label: 'Shared links', show: () => true },
-  { id: 'users',       label: 'Users',       show: () => isUserManager.value },
-  { id: 'places',      label: 'Places',      show: () => isAdmin.value, group: 'admin' },
-  { id: 'permissions', label: 'Permissions', show: () => isAdmin.value, group: 'admin' },
-  { id: 'groups',      label: 'Groups',      show: () => isAdmin.value, group: 'admin' },
-  { id: 'updates',     label: 'Updates',     show: () => isAdmin.value, group: 'admin' },
-  { id: 'backups',     label: 'Backup & restore', show: () => isAdmin.value, group: 'admin' },
-  { id: 'data-backups', label: 'Data backups', show: () => isAdmin.value, group: 'admin' },
+  // Access control: who can reach what. Users is grouped here even though it's
+  // gated on isUserManager (not isAdmin like the rest) — a user manager
+  // without full admin still needs it alongside the places/perms they manage.
+  { id: 'users',       label: 'Users',       show: () => isUserManager.value, group: 'access' },
+  { id: 'places',      label: 'Places',      show: () => isAdmin.value, group: 'access' },
+  { id: 'permissions', label: 'Permissions', show: () => isAdmin.value, group: 'access' },
+  { id: 'groups',      label: 'Groups',      show: () => isAdmin.value, group: 'access' },
+  { id: 'updates',     label: 'Updates',     show: () => isAdmin.value, group: 'system' },
+  { id: 'backups',     label: 'Backup & restore', show: () => isAdmin.value, group: 'backup' },
+  { id: 'data-backups', label: 'Data backups', show: () => isAdmin.value, group: 'backup' },
 ]
 
 const visibleNav = computed(() => nav.filter(n => n.show()))
 
-function showDivider(item: NavItem, index: number): boolean {
-  return item.group === 'admin' && index > 0 && !visibleNav.value[index - 1]?.group
+/** Section label shown above an item's group, only on the group's first visible item. */
+function groupHeader(item: NavItem, index: number): string | null {
+  if (!item.group) return null
+  if (visibleNav.value[index - 1]?.group === item.group) return null
+  return GROUP_LABEL[item.group]
 }
 
-const active = ref<SectionId>('profile')
+const active = ref<SectionId>(props.focusSection ?? 'profile')
 
 watch(() => props.focusSection, s => { if (s) active.value = s })
 
@@ -68,8 +82,8 @@ defineExpose({ focusOn })
 
       <template v-for="(item, i) in visibleNav" :key="item.id">
 
-        <!-- Divider before first admin group -->
-        <div v-if="showDivider(item, i)" class="mx-2 my-1.5 border-t border-[var(--c-border)]" />
+        <!-- Section label above each group's first visible item -->
+        <div v-if="groupHeader(item, i)" class="eyebrow px-3 pt-4 pb-1.5">{{ groupHeader(item, i) }}</div>
 
         <div class="relative flex items-center">
           <span

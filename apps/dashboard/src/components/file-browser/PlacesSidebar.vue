@@ -43,7 +43,9 @@ defineEmits<{ select: [place: Place]; openProperties: [place: Place] }>()
           </svg>
         </span>
       </button>
-      <p v-if="places.length === 0" class="text-xs text-[var(--c-text-3)] italic px-2.5 py-2">No places configured.</p>
+      <p v-if="places.length === 0" class="text-xs text-[var(--c-text-3)] px-2.5 py-2 leading-snug">
+        No places yet. Ask an admin to grant you access to a folder.
+      </p>
     </nav>
   </aside>
 </template>

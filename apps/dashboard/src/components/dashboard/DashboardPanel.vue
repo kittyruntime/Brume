@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SegmentedBar from '../ui/SegmentedBar.vue'
+import GettingStartedCard from './GettingStartedCard.vue'
 import {
   useDashboardWidgets, catalogFor, spark, fmtBytes, fmtMem, memColor, fmtGB, diskColor,
 } from '../../lib/dashboard-widgets'
@@ -14,6 +15,8 @@ const {
   disks, sysinfo, smart, smartDevices,
   toggleCols, removeWidget, addWidget,
 } = useDashboardWidgets()
+
+const emit = defineEmits<{ navigate: [target: 'places' | 'store' | 'backups'] }>()
 
 const { isAdmin, hasCapability } = useAuth()
 const catalog = computed(() => catalogFor(isAdmin.value, cap => hasCapability(cap).value))
@@ -78,6 +81,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
         </Transition>
       </div>
     </div>
+
+    <GettingStartedCard v-if="isAdmin" @navigate="emit('navigate', $event)" />
 
     <!-- Widget grid -->
     <div class="flex-1 overflow-y-auto p-4 sm:p-6">
