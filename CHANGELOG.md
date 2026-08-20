@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **File browser toolbar**: "New folder" and "New file" are now a single "New" menu, and the
+  always-open search field collapses to an icon until clicked — both free up room for the
+  breadcrumb in a narrow window or on a phone.
+- **File list view on phones**: the file table now switches to a card layout below the `sm`
+  breakpoint instead of squeezing (or horizontally scrolling) a 4-column table — the same
+  treatment every other table in the app already had.
+
+### Fixed
+- **Illegible file name on hover**: the grid view's hover state set file names to hardcoded
+  white text instead of a theme token, making them unreadable in light theme.
+
 ## [1.50.1] - 2026-08-20
 
 ### Fixed

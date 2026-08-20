@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
 type Entry = { name: string; path: string; type: 'dir' | 'file'; size: number | null; mtime: string }
 type Crumb = { label: string; path: string; clickable: boolean }
@@ -37,6 +37,8 @@ const emit = defineEmits<{
 }>()
 
 const searchQuery = ref('')
+const searchOpen  = ref(false)
+const searchInput = ref<HTMLInputElement | null>(null)
 
 function submitSearch() {
   if (searchQuery.value.trim()) emit('search', searchQuery.value.trim())
@@ -44,8 +46,17 @@ function submitSearch() {
 
 function clearSearch() {
   searchQuery.value = ''
+  searchOpen.value = false
   emit('search', '')
 }
+
+async function openSearch() {
+  searchOpen.value = true
+  await nextTick()
+  searchInput.value?.focus()
+}
+
+const newMenuOpen = ref(false)
 </script>
 
 <template>
@@ -53,6 +64,8 @@ function clearSearch() {
     class="flex items-center gap-1.5 px-3 py-2 border-b border-[var(--c-border)] bg-[var(--c-surface-alt)] flex-shrink-0 h-11"
     @click.stop
   >
+    <button v-if="newMenuOpen" class="fixed inset-0 z-20" aria-label="Close menu" @click="newMenuOpen = false" />
+
     <!-- Mobile: places sidebar toggle -->
     <button @click="emit('toggleSidebar')" title="Places" aria-label="Toggle places sidebar"
       class="sm:hidden p-1.5 rounded-lg flex-shrink-0 transition-colors"
@@ -139,23 +152,39 @@ function clearSearch() {
         <div class="w-px h-3.5 bg-[var(--c-border-strong)] mx-0.5 flex-shrink-0" />
       </template>
 
-      <!-- New Folder -->
-      <button v-if="currentPath" @click="emit('createFolder')" title="New Folder" aria-label="Create folder"
-        class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors text-xs">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-        </svg>
-        <span class="hidden sm:inline">New folder</span>
-      </button>
-
-      <!-- New File -->
-      <button v-if="currentPath" @click="emit('createFile')" title="New File" aria-label="Create file"
-        class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors text-xs">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-        <span class="hidden sm:inline">New file</span>
-      </button>
+      <!-- New (folder / file) -->
+      <div v-if="currentPath" class="relative">
+        <button @click.stop="newMenuOpen = !newMenuOpen" title="New" aria-label="Create new folder or file" :aria-expanded="newMenuOpen"
+          :class="['flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors text-xs',
+            newMenuOpen ? 'bg-[var(--c-hover)] text-[var(--c-text-1)]' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)]']">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span class="hidden sm:inline">New</span>
+          <svg class="hidden sm:block w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+        <Transition name="ui-pop">
+          <div v-if="newMenuOpen"
+            class="absolute left-0 top-full z-30 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] shadow-[var(--shadow-md)]">
+            <button @click="emit('createFolder'); newMenuOpen = false"
+              class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-hover)]">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+              </svg>
+              New folder
+            </button>
+            <button @click="emit('createFile'); newMenuOpen = false"
+              class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[var(--c-text-2)] transition-colors hover:bg-[var(--c-hover)]">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              New file
+            </button>
+          </div>
+        </Transition>
+      </div>
 
       <!-- Upload -->
       <button v-if="currentPath" @click="emit('uploadClick')" title="Upload files" aria-label="Upload files"
@@ -205,21 +234,30 @@ function clearSearch() {
         </button>
       </div>
 
-      <!-- Search -->
-      <div v-if="currentPath" class="flex items-center gap-1 ml-1 border-l border-[var(--c-border)] pl-2">
-        <div class="relative">
+      <!-- Search — collapsed to an icon until opened, so it doesn't permanently
+           claim ~150px from the breadcrumb (tight in a narrow desktop-mode
+           window, tighter still on a phone). -->
+      <div v-if="currentPath" class="flex items-center ml-1 border-l border-[var(--c-border)] pl-2">
+        <button v-if="!searchOpen" @click="openSearch" title="Search" aria-label="Search this folder"
+          class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </button>
+        <div v-else class="relative">
           <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--c-text-3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
           <input
+            ref="searchInput"
             v-model="searchQuery"
             @keydown.enter="submitSearch"
             @keydown.escape="clearSearch"
             type="text"
             placeholder="Search…"
-            class="pl-6 pr-2 py-1 text-xs rounded-sm border border-[var(--c-border)] bg-[var(--c-surface-deep)] text-[var(--c-text-1)] placeholder:text-[var(--c-text-3)] focus:outline-none focus:border-[var(--c-accent)]/50 w-36 transition-colors"
+            class="pl-6 pr-6 py-1 text-xs rounded-sm border border-[var(--c-border)] bg-[var(--c-surface-deep)] text-[var(--c-text-1)] placeholder:text-[var(--c-text-3)] focus:outline-none focus:border-[var(--c-accent)]/50 w-28 sm:w-36 transition-colors"
           />
-          <button v-if="searchQuery" @click="clearSearch"
+          <button @click="clearSearch" title="Close search" aria-label="Close search"
             class="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--c-text-3)] hover:text-[var(--c-text-1)]">
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>

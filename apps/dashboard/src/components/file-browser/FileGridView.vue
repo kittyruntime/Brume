@@ -175,7 +175,7 @@ function fileExt(name: string): string {
       <template v-else>
         <span
           @dblclick.stop="emit('startRename', entry)"
-          class="text-xs leading-tight text-[var(--c-text-2)] w-full text-center truncate px-1 hover:text-white transition-colors"
+          class="text-xs leading-tight text-[var(--c-text-2)] w-full text-center truncate px-1 hover:text-[var(--c-text-1)] transition-colors"
           :title="entry.name">
           {{ entry.name }}
         </span>
