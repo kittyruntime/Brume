@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.50.1] - 2026-08-20
+
 ### Fixed
 - **Broken update trigger**: `install.sh` locks `INSTALL_DIR` itself down to root ownership,
   but the unprivileged backend wrote the pending-update marker directly into it, failing with
@@ -808,7 +810,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.1...HEAD
+[1.50.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.0...v1.50.1
 [1.50.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.49.0...v1.50.0
 [1.49.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.1...v1.49.0
 [1.48.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.48.0...v1.48.1
