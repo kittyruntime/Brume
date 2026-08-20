@@ -8,6 +8,7 @@ import DeviceMountDialog from './dialogs/DeviceMountDialog.vue'
 import DeviceUnmountDialog from './dialogs/DeviceUnmountDialog.vue'
 import ConfirmDestroyDialog from './dialogs/ConfirmDestroyDialog.vue'
 import Modal from '../ui/Modal.vue'
+import LvmIntro from './LvmIntro.vue'
 
 const { loading, error, devices, raids, lvmPVs, lvmVGs, lvmLVs, refresh } = useStorageData()
 
@@ -202,7 +203,7 @@ const openMenu = ref<string | null>(null)
     <div class="flex items-start justify-between mb-4">
       <div>
         <h2 class="text-lg font-semibold text-[var(--c-text-1)]">LVM</h2>
-        <p class="text-sm text-[var(--c-text-3)] mt-0.5">Physical volumes, volume groups et logical volumes.</p>
+        <p class="text-sm text-[var(--c-text-3)] mt-0.5">Physical volumes, volume groups and logical volumes.</p>
       </div>
       <div class="flex items-center gap-2">
         <button @click="openLvmWizard"
@@ -217,6 +218,8 @@ const openMenu = ref<string | null>(null)
         </button>
       </div>
     </div>
+
+    <LvmIntro />
 
     <div v-if="loading && !lvmVGs.length" class="flex items-center gap-2 text-[var(--c-text-3)] text-sm mt-6"><LoadingSpinner /> Loading…</div>
     <div v-else-if="error" class="mt-4 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{{ error }}</div>

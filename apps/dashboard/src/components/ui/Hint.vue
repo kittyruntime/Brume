@@ -23,6 +23,13 @@ function hide() {
   releaseEsc = null
 }
 
+// Ignore focus that isn't from keyboard navigation — a dialog's initial
+// autofocus can otherwise land here (e.g. when this is the first focusable
+// element) and pop the tooltip open unprompted.
+function onFocus(e: FocusEvent) {
+  if ((e.target as HTMLElement).matches(':focus-visible')) show()
+}
+
 onUnmounted(() => releaseEsc?.())
 </script>
 
@@ -34,7 +41,7 @@ onUnmounted(() => releaseEsc?.())
       :aria-describedby="id"
       aria-label="More info"
       @click.stop="open = !open"
-      @focus="show"
+      @focus="onFocus"
       @blur="hide"
     >?</button>
     <Transition name="ui-fade">
@@ -42,7 +49,7 @@ onUnmounted(() => releaseEsc?.())
         v-if="open"
         :id="id"
         role="tooltip"
-        class="absolute bottom-full left-1/2 z-20 mb-1.5 w-56 -translate-x-1/2 rounded-lg border border-[var(--c-border-strong)] bg-[var(--c-surface-alt)] p-2.5 text-xs leading-snug text-[var(--c-text-2)] shadow-lg"
+        class="absolute top-full left-1/2 z-20 mt-1.5 w-56 -translate-x-1/2 rounded-lg border border-[var(--c-border-strong)] bg-[var(--c-surface-alt)] p-2.5 text-xs leading-snug text-[var(--c-text-2)] shadow-lg"
       >{{ text }}</div>
     </Transition>
   </span>

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **RAID level diagrams**: the "create RAID" wizard now shows a small block-distribution
+  diagram for each level (striping, mirroring, parity, mirror+stripe) alongside its
+  description, with a hint explaining how to read it.
+- **"How LVM works" guide**: a dismissible card on the LVM screen walks through the
+  Disks → Volume Group → Logical Volumes flow and explains when LVM is worth the extra
+  layer versus formatting a disk directly.
+
+### Fixed
+- **French string in the LVM screen**: "Physical volumes, volume groups **et** logical
+  volumes" leaked untranslated English-only copy. Corrected to "and".
+- **Hint tooltip popping open unprompted**: when a hint was the first focusable element in
+  a dialog, the dialog's initial focus trap opened its tooltip immediately; it now only
+  reacts to real keyboard focus, and opens downward instead of upward so it can no longer
+  be clipped by a panel's rounded corners.
+- **RAID level picker overflow**: on narrow layouts, the level cards could overflow their
+  container horizontally.
+
 ## [1.49.0] - 2026-08-20
 
 ### Added

@@ -12,6 +12,8 @@ import DeviceMountDialog from './dialogs/DeviceMountDialog.vue'
 import DeviceUnmountDialog from './dialogs/DeviceUnmountDialog.vue'
 import ConfirmDestroyDialog from './dialogs/ConfirmDestroyDialog.vue'
 import Modal from '../ui/Modal.vue'
+import RaidLevelVisual from './RaidLevelVisual.vue'
+import Hint from '../ui/Hint.vue'
 
 const emit = defineEmits<{ navigate: [section: 'disks' | 'lvm'] }>()
 
@@ -385,9 +387,12 @@ const openMenu = ref<string | null>(null)
 
           <!-- Step 1: Choose RAID level -->
           <div v-if="raidWiz.step === 1" class="p-5 space-y-3">
-            <p class="text-sm text-[var(--c-text-3)]">Choose the RAID configuration that matches your needs.</p>
+            <p class="flex items-center gap-1.5 text-sm text-[var(--c-text-3)]">
+              Choose the RAID configuration that matches your needs.
+              <Hint text="Each diagram shows how one chunk of data is placed on the drives. Same letter = identical copy. Different letters = split across drives. P = a parity block, used to rebuild data if a drive fails." />
+            </p>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 v-for="lvl in RAID_LEVELS" :key="lvl.level"
                 @click="raidWiz.level = lvl.level"
@@ -407,6 +412,7 @@ const openMenu = ref<string | null>(null)
                     Redundancy: {{ lvl.redundancy }}
                   </span>
                 </div>
+                <RaidLevelVisual :level="lvl.level" class="mt-2.5 pt-2.5 border-t border-[var(--c-border)]" />
               </button>
             </div>
 
