@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.50.3] - 2026-08-21
+
 ### Security
 - Bumped `deepmerge-ts` (pulled in transitively by Prisma's config loader, in both the main
   lockfile and the release runtime's) to 8.0.1 and `nanoid` (via Tailwind's PostCSS pipeline)
@@ -832,7 +834,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.2...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.3...HEAD
+[1.50.3]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.2...v1.50.3
 [1.50.2]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.1...v1.50.2
 [1.50.1]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.0...v1.50.1
 [1.50.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.49.0...v1.50.0
