@@ -9,5 +9,8 @@
     "bcryptjs": "2.4.3",
     "prisma": "6.19.3",
     "tsx": "4.23.12"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }

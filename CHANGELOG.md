@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bumped `deepmerge-ts` (pulled in transitively by Prisma's config loader, in both the main
+  lockfile and the release runtime's) to 8.0.1 and `nanoid` (via Tailwind's PostCSS pipeline)
+  to 3.3.18, resolving three Dependabot alerts (stack exhaustion on recursive merges;
+  indefinite loop on a zero-size custom generator). Neither package ever saw untrusted input
+  in how this project uses them, but both are pinned via `pnpm.overrides` /
+  `runtime/package.json` `overrides` now regardless.
+
 ## [1.50.2] - 2026-08-20
 
 ### Changed
