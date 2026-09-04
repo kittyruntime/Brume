@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { trpc } from '../../lib/trpc'
 import { useAuth } from '../../lib/auth'
+import { useAdvancedMode } from '../../lib/advanced-mode'
 import Modal from '../ui/Modal.vue'
 import LoadingSpinner from '../ui/LoadingSpinner.vue'
 
@@ -12,12 +13,16 @@ const props = defineProps<{ entry?: Entry; place?: Place }>()
 const emit  = defineEmits<{ close: []; openPermissions: [] }>()
 
 const { isAdmin } = useAuth()
+const { advancedMode } = useAdvancedMode()
 
 // ── state ─────────────────────────────────────────────────────────────────────
 const loading = ref(true)
 const error   = ref('')
 
-type StatInfo = { mode: string; owner: string; group: string; type: string; size: number | null; mtime: string; ctime: string }
+type StatInfo = {
+  mode: string; owner: string; group: string; uid: number; gid: number
+  type: string; size: number | null; mtime: string; ctime: string
+}
 type DiskInfo = { total: number; free: number }
 
 const stat     = ref<StatInfo | null>(null)
@@ -217,6 +222,12 @@ onMounted(async () => {
             <dt class="text-[var(--c-text-3)] shrink-0">Group</dt>
             <dd class="font-mono text-[var(--c-text-1)]">{{ stat.group }}</dd>
           </div>
+          <template v-if="advancedMode">
+            <div class="flex justify-between gap-4">
+              <dt class="text-[var(--c-text-3)] shrink-0">UID / GID</dt>
+              <dd class="font-mono text-[var(--c-text-1)]">{{ stat.uid }} / {{ stat.gid }}</dd>
+            </div>
+          </template>
         </dl>
       </div>
 
