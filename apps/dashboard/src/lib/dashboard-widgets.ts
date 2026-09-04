@@ -151,7 +151,7 @@ export function useDashboardWidgets() {
   }
 
   async function fetchDisks() {
-    try { disks.value = (await trpc.system.disks.query()).disks as DiskFs[] }
+    try { disks.value = (await trpc.storage.disks.query()).disks as DiskFs[] }
     catch { /* non-admin or worker error → stays empty */ }
   }
   async function fetchSysinfo() {
@@ -160,7 +160,7 @@ export function useDashboardWidgets() {
   }
   async function refreshSmartDevices() {
     try {
-      const res = await trpc.system.blockDevices.query() as { devices: BlockDev[] }
+      const res = await trpc.storage.blockDevices.query() as { devices: BlockDev[] }
       smartDevices.value = (res.devices ?? []).filter(d => d.type === 'disk').map(d => d.name)
     } catch { smartDevices.value = [] }
   }

@@ -153,7 +153,7 @@ async function doCreateRaid() {
   w.busy = true
   w.err  = ''
   try {
-    await trpc.system.createRaid.mutate({ name: w.name, level: w.level, devices: w.devs })
+    await trpc.storage.createRaid.mutate({ name: w.name, level: w.level, devices: w.devs })
     raidWiz.value = null
     await refresh()
   } catch (e: any) {
@@ -181,7 +181,7 @@ async function doDestroyRaid() {
   d.busy = true
   d.err  = ''
   try {
-    await trpc.system.stopRaid.mutate({ name: d.raid.name })
+    await trpc.storage.stopRaid.mutate({ name: d.raid.name })
     destroyDlg.value = null
     await refresh()
   } catch (e: any) {

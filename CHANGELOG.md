@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Backend router split**: disk, partition, RAID, LVM, mount and SMART procedures
+  moved from the `system` tRPC router to a dedicated `storage` router
+  (`trpc.storage.*`); `system` now only carries metrics, metrics history and static
+  system info. The audit log records new storage actions under their `storage.*`
+  path — entries logged before this change keep their historical `system.*` action
+  string and still render with the same labels in the UI.
+
 ### Security
 - Bumped `fastify` to 5.12.3 (was 5.10.0), resolving 6 Dependabot alerts (4 high,
   2 moderate): a schema-validation bypass, X-Forwarded-* spoofing under

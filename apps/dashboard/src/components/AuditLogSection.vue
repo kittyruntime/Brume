@@ -60,6 +60,8 @@ function actionLabel(action: string): string {
     'fs.rename':                    'Rename',
     'fs.move':                      'Move',
     'fs.copy':                      'Copy',
+    // Legacy `system.*` keys: storage mutations were logged under those paths before
+    // the router split, and historical audit rows keep their original action string.
     'system.formatDisk':            'Format disk',
     'system.mountDevice':           'Mount device',
     'system.umountDevice':          'Unmount device',
@@ -73,6 +75,19 @@ function actionLabel(action: string): string {
     'system.createLv':              'Create LV',
     'system.removeLv':              'Remove LV',
     'system.removeVg':              'Remove VG',
+    'storage.formatDisk':           'Format disk',
+    'storage.mountDevice':          'Mount device',
+    'storage.umountDevice':         'Unmount device',
+    'storage.initPartitionTable':   'Init partition table',
+    'storage.createPartition':      'Create partition',
+    'storage.deletePartition':      'Delete partition',
+    'storage.createRaid':           'Create RAID',
+    'storage.stopRaid':             'Stop RAID',
+    'storage.createPv':             'Create PV',
+    'storage.createVg':             'Create VG',
+    'storage.createLv':             'Create LV',
+    'storage.removeLv':             'Remove LV',
+    'storage.removeVg':             'Remove VG',
     'user.create':                  'Create user',
     'user.update':                  'Update user',
     'user.delete':                  'Delete user',
@@ -103,7 +118,7 @@ type Category = 'auth' | 'fs' | 'system' | 'admin' | 'other'
 function actionCategory(action: string): Category {
   if (action.startsWith('auth.'))     return 'auth'
   if (action.startsWith('fs.'))       return 'fs'
-  if (action.startsWith('system.'))   return 'system'
+  if (action.startsWith('system.') || action.startsWith('storage.'))   return 'system'
   if (action.startsWith('user.') || action.startsWith('role.') ||
       action.startsWith('place.') || action.startsWith('container.') ||
       action.startsWith('update.'))   return 'admin'

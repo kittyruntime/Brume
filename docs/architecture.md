@@ -58,8 +58,8 @@ The API surface is the set of routers in `apps/backend/src/trpc/routers/`, each
 mapping to a feature area:
 
 `auth` · `user` · `permission` · `place` · `fs` · `container` ·
-`system` (disks/RAID/LVM/mounts) · `sharing` (SMB) · `audit` · `tasks`
-(background jobs) · `update` · `wallpaper`
+`system` (metrics, sysinfo) · `storage` (disks/RAID/LVM/mounts) ·
+`sharing` (SMB) · `audit` · `tasks` (background jobs) · `update` · `wallpaper`
 
 ## Places
 

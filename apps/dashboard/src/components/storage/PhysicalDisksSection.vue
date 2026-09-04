@@ -79,7 +79,7 @@ async function doPartInit() {
   const d = partInitDlg.value
   d.busy = true; d.err = ''
   try {
-    await trpc.system.initPartitionTable.mutate({ device: d.disk.name })
+    await trpc.storage.initPartitionTable.mutate({ device: d.disk.name })
     partInitDlg.value = null
     await refresh()
   } catch (e: unknown) {
@@ -96,7 +96,7 @@ async function doPartCreate() {
   const d = partCreateDlg.value
   d.busy = true; d.err = ''
   try {
-    await trpc.system.createPartition.mutate({ device: d.disk.name, startPct: 0, endPct: 100 })
+    await trpc.storage.createPartition.mutate({ device: d.disk.name, startPct: 0, endPct: 100 })
     partCreateDlg.value = null
     await refresh()
   } catch (e: unknown) {
@@ -120,7 +120,7 @@ async function doPartDelete() {
   const num = partNumOf(d.disk.name, d.part.name)
   d.busy = true; d.err = ''
   try {
-    await trpc.system.deletePartition.mutate({ device: d.disk.name, partNum: num })
+    await trpc.storage.deletePartition.mutate({ device: d.disk.name, partNum: num })
     partDeleteDlg.value = null
     await refresh()
   } catch (e: unknown) {

@@ -154,8 +154,8 @@ async function fetchAll(): Promise<void> {
   state.error   = ''
   try {
     const [blk, lvm] = await Promise.all([
-      trpc.system.blockDevices.query() as Promise<{ devices: BlockDev[]; raids: RaidArray[] }>,
-      trpc.system.lvmInfo.query().catch(() => ({ pvs: [], vgs: [], lvs: [] })),
+      trpc.storage.blockDevices.query() as Promise<{ devices: BlockDev[]; raids: RaidArray[] }>,
+      trpc.storage.lvmInfo.query().catch(() => ({ pvs: [], vgs: [], lvs: [] })),
     ])
     state.devices = blk.devices ?? []
     state.raids   = blk.raids   ?? []

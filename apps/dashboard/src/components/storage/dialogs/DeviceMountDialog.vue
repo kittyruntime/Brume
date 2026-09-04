@@ -28,7 +28,7 @@ async function doMount() {
   d.err  = ''
   try {
     const device = d.dev.path.replace(/^\/dev\//, '')
-    await trpc.system.mountDevice.mutate({ device, mountpoint: d.mp, options: d.options || undefined, persist: d.persist })
+    await trpc.storage.mountDevice.mutate({ device, mountpoint: d.mp, options: d.options || undefined, persist: d.persist })
     dlg.value = null
     emit('done')
   } catch (e: unknown) {

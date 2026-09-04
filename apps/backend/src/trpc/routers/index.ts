@@ -8,6 +8,7 @@ import { permissionRouter } from "./permission"
 import { tasksRouter } from "./tasks"
 import { containerRouter } from "./container"
 import { systemRouter } from "./system"
+import { storageRouter } from "./storage"
 import { updateRouter } from "./update"
 import { wallpaperRouter } from "./wallpaper"
 import { auditRouter } from "./audit"
@@ -27,6 +28,7 @@ export const appRouter = router({
   tasks: tasksRouter,
   container: containerRouter,
   system: systemRouter,
+  storage: storageRouter,
   update: updateRouter,
   wallpaper: wallpaperRouter,
   audit: auditRouter,

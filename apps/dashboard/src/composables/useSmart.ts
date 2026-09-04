@@ -48,7 +48,7 @@ export async function fetchSmartInto(
 ): Promise<void> {
   cache.value = { ...cache.value, [device]: emptySmart(device, { _loading: true }) }
   try {
-    const res = await trpc.system.smartInfo.query({ device }) as SmartResult
+    const res = await trpc.storage.smartInfo.query({ device }) as SmartResult
     cache.value = { ...cache.value, [device]: res }
   } catch (e: unknown) {
     cache.value = {

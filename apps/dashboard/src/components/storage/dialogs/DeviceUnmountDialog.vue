@@ -25,7 +25,7 @@ async function doUmount() {
   d.busy = true
   d.err  = ''
   try {
-    await trpc.system.umountDevice.mutate({ mountpoint: d.dev.mountpoint, removeFromFstab: d.rmFstab })
+    await trpc.storage.umountDevice.mutate({ mountpoint: d.dev.mountpoint, removeFromFstab: d.rmFstab })
     dlg.value = null
     emit('done')
   } catch (e: unknown) {

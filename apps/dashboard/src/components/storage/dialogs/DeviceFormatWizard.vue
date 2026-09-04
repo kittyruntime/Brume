@@ -40,7 +40,7 @@ async function doFormat() {
   w.err  = ''
   try {
     const device = w.dev.path.replace(/^\/dev\//, '')
-    await trpc.system.formatDisk.mutate({ device, fstype: w.fstype, label: w.label || undefined })
+    await trpc.storage.formatDisk.mutate({ device, fstype: w.fstype, label: w.label || undefined })
     wiz.value = null
     emit('done')
   } catch (e: unknown) {

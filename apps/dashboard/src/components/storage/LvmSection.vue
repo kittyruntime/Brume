@@ -107,10 +107,10 @@ async function doCreateLvm() {
   const w = lvmWiz.value
   w.busy = true; w.err = ''
   try {
-    await trpc.system.createPv.mutate({ devices: w.pvDevs })
-    await trpc.system.createVg.mutate({ name: w.vgName, devices: w.pvDevs })
+    await trpc.storage.createPv.mutate({ devices: w.pvDevs })
+    await trpc.storage.createVg.mutate({ name: w.vgName, devices: w.pvDevs })
     const sizeBytes = w.lvSizeGB > 0 ? Math.floor(w.lvSizeGB * 1024 ** 3) : 0
-    await trpc.system.createLv.mutate({ vgName: w.vgName, lvName: w.lvName, sizeBytes })
+    await trpc.storage.createLv.mutate({ vgName: w.vgName, lvName: w.lvName, sizeBytes })
     lvmWiz.value = null
     await refresh()
   } catch (e: any) {
@@ -136,7 +136,7 @@ async function doAddLv() {
   d.busy = true; d.err = ''
   try {
     const sizeBytes = d.lvSizeGB > 0 ? Math.floor(d.lvSizeGB * 1024 ** 3) : 0
-    await trpc.system.createLv.mutate({ vgName: d.vg.name, lvName: d.lvName, sizeBytes })
+    await trpc.storage.createLv.mutate({ vgName: d.vg.name, lvName: d.lvName, sizeBytes })
     addLvDlg.value = null
     await refresh()
   } catch (e: any) {
@@ -155,7 +155,7 @@ async function doRemoveLv() {
   const d = removeLvDlg.value
   d.busy = true; d.err = ''
   try {
-    await trpc.system.removeLv.mutate({ vgName: d.lv.vgName, lvName: d.lv.name })
+    await trpc.storage.removeLv.mutate({ vgName: d.lv.vgName, lvName: d.lv.name })
     removeLvDlg.value = null
     await refresh()
   } catch (e: any) {
@@ -174,7 +174,7 @@ async function doRemoveVg() {
   const d = removeVgDlg.value
   d.busy = true; d.err = ''
   try {
-    await trpc.system.removeVg.mutate({ vgName: d.vg.name })
+    await trpc.storage.removeVg.mutate({ vgName: d.vg.name })
     removeVgDlg.value = null
     await refresh()
   } catch (e: any) {
