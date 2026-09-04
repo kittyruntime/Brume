@@ -4,9 +4,8 @@ import PhysicalDisksSection from './PhysicalDisksSection.vue'
 import RaidSection from './RaidSection.vue'
 import LvmSection from './LvmSection.vue'
 import MountsSection from './MountsSection.vue'
-import AlertsSection from './AlertsSection.vue'
 
-type SectionId = 'disks' | 'raid' | 'lvm' | 'mounts' | 'alerts'
+type SectionId = 'disks' | 'raid' | 'lvm' | 'mounts'
 
 interface NavItem { id: SectionId; label: string }
 
@@ -15,7 +14,6 @@ const nav: NavItem[] = [
   { id: 'raid',   label: 'RAID' },
   { id: 'lvm',    label: 'LVM' },
   { id: 'mounts', label: 'Mounts' },
-  { id: 'alerts', label: 'Alerts' },
 ]
 
 const active = ref<SectionId>('disks')
@@ -66,12 +64,8 @@ function focusOn(section: SectionId) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h18M3 17h18"/>
           </svg>
           <!-- Mounts -->
-          <svg v-else-if="item.id === 'mounts'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <svg v-if="item.id === 'mounts'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
-          </svg>
-          <!-- Alerts -->
-          <svg v-else-if="item.id === 'alerts'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
           </svg>
           {{ item.label }}
         </button>
@@ -85,7 +79,6 @@ function focusOn(section: SectionId) {
         <RaidSection          v-else-if="active === 'raid'"   @navigate="focusOn" />
         <LvmSection           v-else-if="active === 'lvm'" />
         <MountsSection        v-else-if="active === 'mounts'" @navigate="focusOn" />
-        <AlertsSection        v-else-if="active === 'alerts'" />
       </div>
     </div>
 

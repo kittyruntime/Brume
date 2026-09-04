@@ -9,7 +9,7 @@ import AppIcon from './AppIcon.vue'
 const emit = defineEmits<{ close: [] }>()
 const { openApp } = useDesktop()
 const { isAdmin, hasCapability } = useAuth()
-const { hasAlerts } = useAlerts()
+const { alerts, hasAlerts } = useAlerts()
 
 const visible = ref(true)
 function requestClose() { visible.value = false }
@@ -18,6 +18,7 @@ const allApps: { id: AppId; adminOnly: boolean; capability?: string }[] = [
   { id: 'files',   adminOnly: false },
   { id: 'apps',    adminOnly: false },
   { id: 'storage', adminOnly: true, capability: 'storage' },
+  { id: 'alerts',  adminOnly: true, capability: 'storage' },
   { id: 'store',   adminOnly: true },
   { id: 'monitor', adminOnly: true },
   { id: 'sharing', adminOnly: true },
@@ -57,6 +58,8 @@ useEscLayer(requestClose)
           <div class="relative w-16 h-16 rounded-xl bg-[var(--c-surface)] border border-[var(--c-border-strong)] flex items-center justify-center text-[var(--c-text-2)]">
             <AppIcon :app="id" :stroke-width="1.5" class="w-7 h-7" />
             <span v-if="id === 'storage' && hasAlerts('storage.')"
+              class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
+            <span v-else-if="id === 'alerts' && alerts.length"
               class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
           </div>
           <span class="eyebrow">{{ APP_LABEL[id] }}</span>

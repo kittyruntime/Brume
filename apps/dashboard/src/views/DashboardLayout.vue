@@ -18,6 +18,7 @@ const SettingsPanel = defineAsyncComponent(() => import('../components/SettingsP
 const StoragePanel = defineAsyncComponent(() => import('../components/storage/StoragePanel.vue'))
 const AppStorePanel = defineAsyncComponent(() => import('../components/store/AppStorePanel.vue'))
 const MonitorPanel = defineAsyncComponent(() => import('../components/monitor/MonitorPanel.vue'))
+const AlertsPanel = defineAsyncComponent(() => import('../components/alerts/AlertsPanel.vue'))
 const AppsPanel = defineAsyncComponent(() => import('../components/apps/AppsPanel.vue'))
 const SharingPanel = defineAsyncComponent(() => import('../components/sharing/SharingPanel.vue'))
 import NotificationMenu from '../components/NotificationMenu.vue'
@@ -29,7 +30,7 @@ import DesktopShell from '../components/desktop/DesktopShell.vue'
 
 const router = useRouter()
 const { currentUsername, isAdmin, hasCapability, mustChangePassword, logout } = useAuth()
-const { hasAlerts } = useAlerts()
+const { alerts, hasAlerts } = useAlerts()
 const { notifications } = useNotifications()
 const { desktopMode, setDesktopMode, openApp } = useDesktop()
 
@@ -77,6 +78,7 @@ const activeAppLabel = computed(() => {
   if (activeApp.value === 'store') return 'App Store'
   if (activeApp.value === 'monitor') return 'Monitor'
   if (activeApp.value === 'sharing') return 'Sharing'
+  if (activeApp.value === 'alerts') return 'Alerts'
   return 'Overview'
 })
 
@@ -286,6 +288,10 @@ onUnmounted(() => {
                 v-if="item.id === 'storage' && hasAlerts('storage.') && !isActive('storage')"
                 class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger"
               />
+              <span
+                v-if="item.id === 'alerts' && alerts.length && !isActive('alerts')"
+                class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger"
+              />
             </button>
           </div>
         </nav>
@@ -450,6 +456,7 @@ onUnmounted(() => {
           <AppStorePanel v-else-if="activeApp === 'store'" class="h-full" />
           <MonitorPanel v-else-if="activeApp === 'monitor'" class="h-full" />
           <SharingPanel v-else-if="activeApp === 'sharing'" class="h-full" />
+          <AlertsPanel v-else-if="activeApp === 'alerts'" class="h-full" />
           <div v-else class="flex items-center justify-center h-full text-[var(--c-text-3)] select-none">
             <div class="text-center space-y-3">
               <svg class="w-12 h-12 mx-auto opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
@@ -478,6 +485,8 @@ onUnmounted(() => {
           <span v-if="item.id === 'settings' && updateAvailable && !isActive('settings')"
             class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--c-warning)]" />
           <span v-if="item.id === 'storage' && hasAlerts('storage.') && !isActive('storage')"
+            class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
+          <span v-if="item.id === 'alerts' && alerts.length && !isActive('alerts')"
             class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />
         </button>
       </div>
