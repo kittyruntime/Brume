@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bumped `fastify` to 5.12.3 (was 5.10.0), resolving 6 Dependabot alerts (4 high,
+  2 moderate): a schema-validation bypass, X-Forwarded-* spoofing under
+  `trustProxy` hop-count, and three `fast-uri` host-confusion/SSRF advisories in
+  fastify's own dependency chain (`@fastify/ajv-compiler` / `fast-json-stringify`
+  → `ajv` → `fast-uri`, now resolving to the patched 3.1.7). Also pinned
+  `fast-uri` via `pnpm.overrides`, same pattern as the existing `deepmerge-ts`/
+  `nanoid` pins, so a future dependency shuffle can't silently reintroduce an
+  older copy. `pnpm audit --prod`, backend typecheck/tests/build, and the boot
+  smoke test are all clean against the bumped version.
+
 ## [1.50.3] - 2026-08-21
 
 ### Security
