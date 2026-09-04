@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import OverviewSection from '../OverviewSection.vue'
-import SystemSection from '../SystemSection.vue'
+import SystemInfoSection from '../SystemInfoSection.vue'
+import MonitoringSection from '../MonitoringSection.vue'
 import AuditLogSection from '../AuditLogSection.vue'
 
-type SectionId = 'overview' | 'system' | 'audit'
+type SectionId = 'overview' | 'system-info' | 'monitoring' | 'audit'
 
 interface NavItem { id: SectionId; label: string }
 
 const nav: NavItem[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'system',   label: 'System' },
-  { id: 'audit',    label: 'Audit Log' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'system-info', label: 'System Info' },
+  { id: 'monitoring',  label: 'Monitoring' },
+  { id: 'audit',       label: 'Audit Log' },
 ]
 
 const active = ref<SectionId>('overview')
@@ -47,9 +49,13 @@ const active = ref<SectionId>('overview')
           <svg v-if="item.id === 'overview'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
           </svg>
-          <!-- System -->
-          <svg v-else-if="item.id === 'system'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <!-- System Info -->
+          <svg v-else-if="item.id === 'system-info'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+          <!-- Monitoring -->
+          <svg v-else-if="item.id === 'monitoring'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4"/>
           </svg>
           <!-- Audit -->
           <svg v-else-if="item.id === 'audit'" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -63,9 +69,10 @@ const active = ref<SectionId>('overview')
     <!-- Content -->
     <div class="flex-1 overflow-y-auto">
       <div :class="['p-4 sm:p-8', active === 'audit' ? 'max-w-5xl' : 'max-w-4xl']">
-        <OverviewSection  v-if="active === 'overview'" />
-        <SystemSection    v-else-if="active === 'system'" />
-        <AuditLogSection  v-else-if="active === 'audit'" />
+        <OverviewSection    v-if="active === 'overview'" />
+        <SystemInfoSection  v-else-if="active === 'system-info'" />
+        <MonitoringSection  v-else-if="active === 'monitoring'" />
+        <AuditLogSection    v-else-if="active === 'audit'" />
       </div>
     </div>
 
