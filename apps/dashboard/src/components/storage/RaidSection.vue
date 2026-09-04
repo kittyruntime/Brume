@@ -280,6 +280,8 @@ const openMenu = ref<string | null>(null)
             </div>
           </div>
           <p v-if="raidDescription(r.level)" class="text-[11px] text-[var(--c-text-3)] px-4 pb-3">{{ raidDescription(r.level) }}</p>
+          <!-- Built from: member devices, completing the disk → RAID chain started in Devices -->
+          <p class="text-[11px] text-[var(--c-text-3)] px-4 pb-3 font-mono">← {{ r.devices.map(d => '/dev/' + d).join(' + ') }}</p>
 
           <!-- Drive bay -->
           <div class="px-4 pb-4">
