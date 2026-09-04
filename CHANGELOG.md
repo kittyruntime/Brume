@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   system info. The audit log records new storage actions under their `storage.*`
   path — entries logged before this change keep their historical `system.*` action
   string and still render with the same labels in the UI.
+- **Storage is now a self-contained sub-application**: its data layer
+  (`store.ts`/`smart.ts`) lives inside `components/storage/`, and the Disks tab
+  became **Devices** — a physical-first tree where each disk shows its partitions,
+  their role (filesystem, RAID member or LVM PV with cross-navigation), and the
+  logical volumes nested under their PV, mirroring the real hardware hierarchy.
+  RAID arrays display their member devices under the header.
+- **Alerts are a first-class app**: the storage alerts tab moved to a dedicated
+  top-level Alerts app listing alerts from all sources (with a source filter),
+  alongside the disk-usage threshold configuration.
 
 ### Security
 - Bumped `fastify` to 5.12.3 (was 5.10.0), resolving 6 Dependabot alerts (4 high,
