@@ -70,9 +70,46 @@ async function checkSmart(): Promise<CheckOutcome> {
   return { found, checked }
 }
 
+async function getThresholds(): Promise<{ warning: number; critical: number }> {
+  const row = await prisma.alertThreshold.findUnique({ where: { id: "default" } })
+  return {
+    warning: row?.diskUsageWarningPercent ?? 80,
+    critical: row?.diskUsageCriticalPercent ?? 90,
+  }
+}
+
+// One Place can share a filesystem with another (two Places under the same
+// mount) — check each distinct path once, not once per Place, so a full
+// filesystem doesn't produce N identical alerts for N Places on it.
+async function checkDiskUsage(): Promise<CheckOutcome> {
+  const places = await prisma.place.findMany({ select: { path: true } })
+  const paths = [...new Set(places.map(p => p.path))]
+  const { warning, critical } = await getThresholds()
+  const found: CheckResult[] = []
+  const checked: string[] = []
+  for (const path of paths) {
+    let usage: { total: number; free: number }
+    try {
+      usage = await requestSync<{ total: number; free: number }>("root.fs.diskusage", { path, allowedRoot: "" }, 15_000)
+    } catch {
+      continue // unreadable this tick (e.g. Place path temporarily gone) — leave any existing alert alone
+    }
+    if (usage.total <= 0) continue
+    checked.push(path)
+    const usedPercent = ((usage.total - usage.free) / usage.total) * 100
+    if (usedPercent >= critical) {
+      found.push({ target: path, message: `Disk usage: ${usedPercent.toFixed(1)}% (critical, threshold ${critical}%)` })
+    } else if (usedPercent >= warning) {
+      found.push({ target: path, message: `Disk usage: ${usedPercent.toFixed(1)}% (warning, threshold ${warning}%)` })
+    }
+  }
+  return { found, checked }
+}
+
 const checkers: Checker[] = [
   { source: "storage.raid", check: checkRaid },
   { source: "storage.smart", check: checkSmart },
+  { source: "storage.disk-usage", check: checkDiskUsage },
 ]
 
 async function runChecks(): Promise<void> {

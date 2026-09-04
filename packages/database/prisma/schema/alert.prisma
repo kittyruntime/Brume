@@ -7,3 +7,13 @@ model Alert {
   lastSeenAt  DateTime @updatedAt
   @@unique([source, target])
 }
+
+// Single settings row (id fixed to "default") — not a per-user preference, so it
+// doesn't belong in User.preferences; not observed system state, so it doesn't
+// belong in Alert. Threshold percentages the storage.disk-usage checker compares
+// each Place's usage against.
+model AlertThreshold {
+  id                       String @id @default("default")
+  diskUsageWarningPercent  Int    @default(80)
+  diskUsageCriticalPercent Int    @default(90)
+}
