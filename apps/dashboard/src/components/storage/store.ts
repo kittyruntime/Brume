@@ -1,6 +1,6 @@
-// apps/dashboard/src/composables/useStorageData.ts
+// apps/dashboard/src/components/storage/store.ts
 import { reactive, toRefs, onMounted } from 'vue'
-import { trpc } from '../lib/trpc'
+import { trpc } from '../../lib/trpc'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

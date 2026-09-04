@@ -1,7 +1,7 @@
 import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { trpc } from './trpc'
-import { type SmartResult, fetchSmartInto } from './../composables/useSmart'
-import { type BlockDev } from './../composables/useStorageData'
+import { type SmartResult, fetchSmartInto } from '../components/storage/smart'
+import { type BlockDev } from '../components/storage/store'
 import { useAuth } from './auth'
 
 export type WidgetType = 'cpu' | 'memory' | 'network' | 'containers' | 'storage' | 'sysinfo' | 'smart'

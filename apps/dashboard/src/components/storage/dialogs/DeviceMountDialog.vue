@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { trpc } from '../../../lib/trpc'
-import { fmtBytes, type BlockDev } from '../../../composables/useStorageData'
+import { fmtBytes, type BlockDev } from '../store'
 import Modal from '../../ui/Modal.vue'
 
 /* Shared mount dialog. Call open(dev) via a template ref; emits `done` after a

@@ -4,7 +4,7 @@ import SegmentedBar from '../ui/SegmentedBar.vue'
 import {
   useDashboardWidgets, catalogFor, spark, fmtBytes, fmtMem, memColor, fmtGB, diskColor, type Widget,
 } from '../../lib/dashboard-widgets'
-import { smartStatus } from '../../composables/useSmart'
+import { smartStatus } from '../storage/smart'
 import { useAuth } from '../../lib/auth'
 
 defineEmits<{

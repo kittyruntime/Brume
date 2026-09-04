@@ -4,8 +4,8 @@ import { trpc } from '../../lib/trpc'
 import {
   useStorageData, fmtBytes, fmtHours, fmtTiB, usagePct, usageBarClass,
   type BlockDev,
-} from '../../composables/useStorageData'
-import { type SmartResult, smartStatus, fetchSmartInto } from '../../composables/useSmart'
+} from './store'
+import { type SmartResult, smartStatus, fetchSmartInto } from './smart'
 import LoadingSpinner from '../ui/LoadingSpinner.vue'
 import DeviceFormatWizard from './dialogs/DeviceFormatWizard.vue'
 import DeviceMountDialog from './dialogs/DeviceMountDialog.vue'

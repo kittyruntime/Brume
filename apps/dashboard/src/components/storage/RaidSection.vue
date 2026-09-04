@@ -5,7 +5,7 @@ import {
   useStorageData, fmtBytes, usagePct, usageBarClass,
   raidLevelLabel, raidDescription, isRaidHealthy,
   type BlockDev, type RaidArray,
-} from '../../composables/useStorageData'
+} from './store'
 import LoadingSpinner from '../ui/LoadingSpinner.vue'
 import DeviceFormatWizard from './dialogs/DeviceFormatWizard.vue'
 import DeviceMountDialog from './dialogs/DeviceMountDialog.vue'

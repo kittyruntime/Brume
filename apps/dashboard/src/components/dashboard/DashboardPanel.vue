@@ -5,7 +5,7 @@ import GettingStartedCard from './GettingStartedCard.vue'
 import {
   useDashboardWidgets, catalogFor, spark, fmtBytes, fmtMem, memColor, fmtGB, diskColor,
 } from '../../lib/dashboard-widgets'
-import { smartStatus } from '../../composables/useSmart'
+import { smartStatus } from '../storage/smart'
 import { useAuth } from '../../lib/auth'
 
 const {

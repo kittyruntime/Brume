@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { trpc } from '../lib/trpc'
-import { useStorageData, fmtBytes, isRaidHealthy } from '../composables/useStorageData'
-import type { BlockDev } from '../composables/useStorageData'
+import { useStorageData, fmtBytes, isRaidHealthy } from './storage/store'
+import type { BlockDev } from './storage/store'
 import LoadingState from './ui/LoadingState.vue'
 import ErrorState from './ui/ErrorState.vue'
 

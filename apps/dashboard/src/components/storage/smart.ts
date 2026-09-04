@@ -1,5 +1,5 @@
 import { type Ref } from 'vue'
-import { trpc } from '../lib/trpc'
+import { trpc } from '../../lib/trpc'
 
 export type SmartAttr = {
   id: number; name: string; value: number; worst: number; thresh: number

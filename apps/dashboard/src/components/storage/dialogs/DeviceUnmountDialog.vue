@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { trpc } from '../../../lib/trpc'
-import { type BlockDev } from '../../../composables/useStorageData'
+import { type BlockDev } from '../store'
 import Modal from '../../ui/Modal.vue'
 
 /* Shared unmount dialog. Call open(dev) via a template ref; emits `done` after
