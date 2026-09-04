@@ -613,12 +613,23 @@ export async function fileRoutes(app: FastifyInstance) {
       state.finalizePromise = finalizePromise
     }
 
+    // Uploads land through this raw HTTP route rather than a tRPC fs.* mutation
+    // (chunking binary data doesn't fit tRPC well), so they never pass through
+    // the auditLog middleware every other fs write gets automatically — logged
+    // here by hand instead, once per upload rather than once per chunk.
+    const uploadTarget = join(state.destDir, state.fileName)
     try {
       const jobId = await finalizePromise
       markUploadActive(state)
+      void prisma.auditLog.create({
+        data: { userId: user.userId, action: "files.upload", target: uploadTarget, ip: req.ip, success: true },
+      }).catch(() => {})
       return reply.send({ jobId })
     } catch (error) {
       if (!state.finalizeJobId) state.finalizeSha = undefined
+      void prisma.auditLog.create({
+        data: { userId: user.userId, action: "files.upload", target: uploadTarget, ip: req.ip, success: false },
+      }).catch(() => {})
       if (error instanceof UploadFinalizeHttpError) {
         return reply.status(error.statusCode).send(error.responseBody)
       }

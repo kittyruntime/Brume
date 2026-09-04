@@ -186,10 +186,24 @@ export const shareLinkRouter = router({
   unlock: publicProcedure
     .input(z.object({ token: z.string().max(200), password: z.string().max(200) }))
     .mutation(async ({ ctx, input }) => {
+      // Unauthenticated by design — this is the public unlock attempt itself — so
+      // it can't ride the auditLog tRPC middleware (protectedProcedure-only, and
+      // keyed to a signed-in userId). Logged manually instead, same pattern as
+      // auth.login: every attempt against a password-protected link, success or
+      // not, since this is the one write path on a public share link that isn't
+      // otherwise attributable to anyone.
+      const ip = ctx.req.ip ?? ctx.req.headers["x-forwarded-for"]?.toString()
+      const logAttempt = (success: boolean) => {
+        void ctx.prisma.auditLog.create({
+          data: { action: "shareLink.unlock", target: input.token, ip, success },
+        }).catch(() => {})
+      }
+
       const res = await loadLink(ctx.prisma, input.token)
-      if (!res.ok) throw new TRPCError({ code: "NOT_FOUND", message: "Link unavailable" })
-      if (!res.link.passwordHash) return { accessToken: signShareToken(res.link.id) }
+      if (!res.ok) { logAttempt(false); throw new TRPCError({ code: "NOT_FOUND", message: "Link unavailable" }) }
+      if (!res.link.passwordHash) { logAttempt(true); return { accessToken: signShareToken(res.link.id) } }
       const ok = await bcrypt.compare(input.password, res.link.passwordHash)
+      logAttempt(ok)
       if (!ok) throw new TRPCError({ code: "UNAUTHORIZED", message: "Wrong password" })
       return { accessToken: signShareToken(res.link.id) }
     }),
