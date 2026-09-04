@@ -1,119 +1,151 @@
-# Home Server Interface
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="HSI dashboard" width="880">
+</p>
 
-> [!WARNING]
-> **Early stage software.** This project is under active development and has not been audited for security. It may contain vulnerabilities, incomplete features, or breaking changes without notice. Use at your own risk, preferably on an isolated network.
-> Tested on **Ubuntu 24.04** only. Other distributions are not officially supported.
+<h1 align="center">Home Server Interface</h1>
 
-[![Latest release](https://img.shields.io/github/v/release/kittyruntime/home-server-interface)](https://github.com/kittyruntime/home-server-interface/releases/latest)
-[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20x86--64-fcc624?logo=linux&logoColor=black)](#requirements)
+<p align="center">
+  <strong>Turn your Linux server into a private cloud, NAS, and app platform.</strong>
+</p>
 
-**Home Server Interface (HSI)** is an open-source control panel for managing a home server or NAS
-from one modern web interface. Browse and share files, deploy self-hosted apps, operate Docker,
-manage disks and RAID, monitor hardware, control users, and automate encrypted or rsync backups.
+<p align="center">
+  Home Server Interface (HSI) is an open-source control panel for a single Linux server:
+  manage files, run Docker apps from a built-in App Store, operate real storage
+  (S.M.A.R.T., RAID, LVM), and monitor your hardware — all from one modern dashboard,
+  without giving up shell access to the machine underneath.
+</p>
 
-HSI combines a responsive dashboard with an optional windowed desktop experience. It is designed
-for a single Linux server and keeps privileged operations behind a dedicated, isolated worker.
+<p align="center">
+  <a href="https://github.com/kittyruntime/home-server-interface/releases/latest"><img src="https://img.shields.io/github/v/release/kittyruntime/home-server-interface" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue.svg" alt="License: MPL-2.0"></a>
+  <a href="#requirements"><img src="https://img.shields.io/badge/platform-Linux%20x86--64-fcc624?logo=linux&logoColor=black" alt="Platform"></a>
+</p>
 
-[Install](#install) · [Features](#features) · [Documentation](#documentation) · [Releases](https://github.com/kittyruntime/home-server-interface/releases)
+<p align="center">
+  <a href="#quick-install">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#why-hsi">Why HSI?</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="https://github.com/kittyruntime/home-server-interface/releases">Releases</a>
+</p>
 
 ---
 
-![Demo](docs/demo.gif)
+## Quick install
 
----
+One command, on a fresh Ubuntu 24.04 server:
 
-| List view | Grid view |
-|---|---|
-| ![File browser — list view](docs/screenshots/fm-row.png) | ![File browser — grid view](docs/screenshots/fm-grid.png) |
+```bash
+curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo bash
+```
 
-![Upload in progress](docs/screenshots/fm-upload.png)
+That's it — the installer sets up the app user, Node.js, the message broker, the
+privileged worker, and the database, then starts HSI as a systemd service. Full
+details, updates and version pinning are in [Install](#install--update).
 
 ---
 
 ## Features
 
-### A complete home-server workspace
+Every area below is real and in daily use, but HSI is still pre-1.0 — nothing here is
+labeled "Stable" yet. `Beta` means it works and is actively maintained; `Experimental`
+means it's new enough that interfaces may still change. See [Project status](#project-status)
+for what that means in practice.
 
-- **Responsive dashboard** with CPU, memory, storage, system, container and disk-health widgets.
-- **Classic and desktop layouts**: use a mobile-friendly sidebar or a windowed desktop with a dock,
-  launchpad, movable windows, wallpaper, light/dark themes and a custom accent colour.
-- **Account-synced preferences** for themes and reorderable navigation.
+**Files** `Beta` — A full file manager in the browser, not an afterthought.
+- Resumable, pause/resume chunked uploads with integrity checks
+- Built-in code editor and expiring public share links
+- "Places" with per-user and per-group permissions
 
-### Reliable file management and sharing
+**Apps & Docker** `Beta` — Run self-hosted apps and containers without touching a shell.
+- Curated App Store with guided installs and pinned image versions
+- Full container lifecycle: create, edit, logs, networks, mounts
+- Import an existing Compose file to prefill a container
 
-- Browse, search, create, rename, move, copy, delete, download and edit files from the browser.
-- Resumable chunked uploads with SHA-256 integrity checks, pause/resume/cancel controls, live speed,
-  retry support and protection against insufficient disk space.
-- Built-in code editor with syntax highlighting and formatting for common web and data formats.
-- **Places** map friendly names to server paths, with per-user and per-group Read, Write, Delete and
-  Share permissions.
-- Expiring public file/folder links, including guarded ZIP downloads for complete folders.
-- Optional **SMB/Samba sharing** with guest/read-only policies, live connections, password sync and
-  diagnostics that explain access problems.
+**Storage** `Beta` — Real disk and array management, not just a usage bar.
+- S.M.A.R.T. health, partitions, and disk formatting
+- `mdadm` RAID and LVM, with guardrails against destructive actions
+- Mounts and `/etc/fstab` management
 
-### Docker and self-hosted applications
+**Monitoring** `Beta` — Know what your server is doing, live and over time.
+- CPU, RAM, network and storage metrics with 1h–7d history
+- Background alerts for RAID degradation and failing disks
+- Filterable audit trail of privileged actions
 
-- Inspect, create, edit, start, stop and restart containers; view logs and manage ports, environment
-  variables, mounts, networks, labels and advanced settings.
-- Import Compose YAML to prefill a container configuration.
-- Curated **App Store** with guided installation for popular self-hosted applications, pinned image
-  versions, generated secrets, real application icons and live install/runtime state.
-- Host-port conflict warnings and per-port public URL/HTTPS metadata.
+**Users & Sharing** `Beta` — Multi-user from day one.
+- Groups, per-place permissions, and admin/storage delegation
+- Built-in SMB/Samba sharing, synced with HSI accounts
+- Rate-limited logins and redacted audit values
 
-### Storage and hardware operations
+**Backups** `Beta` — Two layers, so config and data are both covered.
+- Encrypted (AES-256-GCM) HSI configuration backup and restore
+- Scheduled rsync backups, local or over SSH, push or pull
 
-- Discover disks and partitions, inspect S.M.A.R.T. health, format disks and manage partition tables.
-- Create and stop `mdadm` RAID arrays with rebuild progress and degraded-array alerts.
-- Manage LVM physical volumes, volume groups and logical volumes.
-- Mount and unmount filesystems, optionally persisting safe entries in `/etc/fstab`.
-- Safety checks prevent destructive operations on active RAID members, LVM volumes and mounted data.
-
-### Monitoring, alerts and lifecycle controls
-
-- Live and historical CPU, RAM and network metrics over 1 hour, 6 hours, 24 hours or 7 days.
-- System details, storage widgets and a filterable audit trail for privileged actions.
-- Background RAID and S.M.A.R.T. alerts, visible without opening the Storage app.
-- Check and apply HSI updates, restart the application, or reboot the host with confirmation and a
-  reconnect timeline.
-- Optional anonymous daily telemetry for aggregate hardware/version insights. It excludes hostnames,
-  network addresses, serial numbers, paths and user data, and can be disabled with
-  `HSI_TELEMETRY_ENABLED=false`.
-
-### Two layers of backup
-
-1. **HSI configuration backup and restore** — export a transactionally consistent database encrypted
-   with AES-256-GCM and a password-derived key. Restore verifies encryption, SQLite integrity and
-   schema compatibility, retains the previous database as a rollback copy, then restarts HSI.
-2. **Scheduled rsync data backups** — push NAS folders to local or SSH destinations, or pull remote
-   folders onto the NAS. Run plans manually, hourly, daily or weekly with exclusions, compression,
-   bandwidth limits, status history and an explicitly enabled mirror mode.
-
-Remote backups use a pre-provisioned SSH key with strict host-key verification. HSI never stores SSH
-passwords and invokes `rsync` with validated arguments without passing commands through a shell.
-
-### Users, permissions and security boundaries
-
-- Linux-valid HSI accounts map consistently to filesystem and Samba identities.
-- Groups and a clear per-Place permission matrix replace opaque role expressions.
-- Separate Admin, User manager and Storage admin capabilities support least-privilege delegation.
-- Permission changes and account demotions take effect on the next request; login attempts are rate
-  limited and sensitive audit values are redacted.
-- The web backend runs unprivileged. A dedicated root worker receives typed jobs through NATS
-  JetStream and performs only validated filesystem, Docker, storage, sharing and host operations.
-- Long-running copies, uploads, archives and backups continue as background jobs independently of the
-  browser tab.
+Full feature details, including the desktop/windowed mode, live in the
+[Documentation](#documentation).
 
 ---
 
-## Documentation
+## Screenshots
 
-Developer and operator documentation lives in [`docs/`](docs/):
+| Desktop mode | App Store |
+|---|---|
+| ![Desktop mode](docs/screenshots/desktop.png) | ![App Store](docs/screenshots/app-store.png) |
 
-- [Architecture](docs/architecture.md) — processes, privilege isolation, data flow, tech stack
-- [Development](docs/development.md) — local setup, build, project layout, release process
-- [Configuration](docs/configuration.md) — environment variables, services, install/update options
-- [Design system](docs/design-system.md) — tokens, shared components and frontend conventions
+| Docker | Storage |
+|---|---|
+| ![Docker containers](docs/screenshots/docker.png) | ![Storage, RAID and LVM](docs/screenshots/storage.png) |
+
+| File manager | Monitoring |
+|---|---|
+| ![File manager](docs/screenshots/files.png) | ![Monitoring](docs/screenshots/monitoring.png) |
+
+See it in motion: [demo.gif](docs/demo.gif)
+
+---
+
+## Why HSI?
+
+Most home-server tooling makes you choose between a friendly dashboard that hides
+Linux, or a raw admin panel that assumes you already know the command line. HSI
+aims for the middle ground:
+
+- **Built for home servers, not adapted from enterprise infra.** Storage, Docker and
+  Sharing are designed around what a home server actually does.
+- **A real file manager, not an afterthought.** Chunked resumable uploads, an inline
+  code editor, and shareable links are first-class features.
+- **Storage you can actually operate.** S.M.A.R.T., partitions, `mdadm` RAID and LVM
+  are managed from the UI, with guardrails against destructive operations.
+- **Docker and an App Store together.** Run a curated app in one click, or manage any
+  container by hand — same interface, same place.
+- **Backups included.** Encrypted config backups and scheduled rsync jobs ship with
+  HSI itself, not as a separate tool you have to wire up.
+- **Security-conscious by design.** The web backend runs unprivileged; every
+  root-level operation goes through a separate, isolated worker process over a
+  message queue — not `sudo` calls from a Node process.
+- **Linux stays visible.** HSI manages your server without hiding it: the Samba
+  shares, `/etc/fstab` entries and systemd units it creates are things you can
+  inspect and touch yourself.
+
+If that sounds like something you'd want to run on your own hardware, a star on
+GitHub helps more people find the project — and takes one click.
+
+---
+
+## Project status
+
+- **Active development.** New features ship regularly, and some interfaces may
+  still change between releases.
+- **Tested on Ubuntu 24.04** (x86-64). Other distributions are not officially
+  supported.
+- **Not security-audited.** Treat it like any early-stage self-hosted project.
+
+> [!WARNING]
+> HSI has not undergone a formal security audit and may contain vulnerabilities,
+> incomplete protections, or breaking changes without notice. If you run it, keep
+> it updated, avoid exposing it directly to the internet, and consider network
+> isolation — especially while the project is this young.
 
 ---
 
@@ -126,7 +158,19 @@ Developer and operator documentation lives in [`docs/`](docs/):
 
 ---
 
-## Install
+## Documentation
+
+Developer and operator documentation lives in [`docs/`](docs/):
+
+- [Architecture](docs/architecture.md) — processes, privilege isolation, data flow, tech stack
+- [Manage without HSI](docs/manage-without-hsi.md) — the files and commands behind Docker, Samba, RAID, mounts and systemd, if HSI is down or gone
+- [Development](docs/development.md) — local setup, build, project layout, release process
+- [Configuration](docs/configuration.md) — environment variables, services, install/update options
+- [Design system](docs/design-system.md) — tokens, shared components and frontend conventions
+
+---
+
+## Install / update
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo bash
@@ -140,24 +184,19 @@ The script:
 5. Applies the database schema
 6. Seeds an `admin / admin` account
 7. Registers and starts three systemd services: `hsi-nats`, `hsi-root-worker`, `hsi`
-
-   Older installs that used the previous default name (`app`) are migrated in place automatically on their next update.
 8. Configures nginx if present
 
 > **Change the admin password immediately after first login.**
 
 ### Update
 
-Re-run the same command. The script detects an existing installation, preserves the database and all secrets, and restarts only the application services.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo bash
-```
+Re-run the same command. The script detects an existing installation, preserves
+the database and all secrets, and restarts only the application services.
 
 ### Pin a version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.47.0 bash
+curl -fsSL https://raw.githubusercontent.com/kittyruntime/home-server-interface/main/scripts/install.sh | sudo VERSION=v1.50.3 bash
 ```
 
 ---
@@ -191,6 +230,20 @@ For a local development environment (dev servers, hot reload, project layout, re
 
 ---
 
+## Contributing
+
+HSI is open source and still shaping its roadmap — feedback from real usage is
+genuinely useful at this stage.
+
+- **Found a bug?** Open an [issue](https://github.com/kittyruntime/home-server-interface/issues).
+- **Missing a feature?** Open an issue describing the use case.
+- **Want to contribute code?** Pull requests are welcome — see
+  [docs/development.md](docs/development.md) for local setup.
+- **General feedback** on the interface or the direction of the project is welcome
+  via issues too.
+
+---
+
 ## License
 
 Home Server Interface is open-source software licensed under the
@@ -200,3 +253,10 @@ You may use, modify, distribute and use the software commercially. Modifications
 to files covered by the MPL must remain available under the MPL-2.0.
 
 © 2025–2026 kittyruntime
+
+---
+
+<p align="center">
+  If you find HSI useful or want to follow its development, consider giving the
+  project a ⭐.
+</p>

@@ -61,6 +61,27 @@ mapping to a feature area:
 `system` (disks/RAID/LVM/mounts) · `sharing` (SMB) · `audit` · `tasks`
 (background jobs) · `update` · `wallpaper`
 
+## Places
+
+A **Place** (`packages/database/prisma/schema/place.prisma`) is a name HSI gives to an
+absolute path that already exists on the server — nothing more. Creating one doesn't
+move data, format anything, or create a new storage unit; it just registers `{ name,
+path }` so the rest of HSI has something to point at.
+
+Everything else attaches to that record:
+
+- **Permissions** — Read/Write/Delete/Share, per user or per group, are granted against
+  a Place (see [Permissions model](#permissions-model) below).
+- **Sharing** — a Place can optionally have one `Share` (SMB), which exposes its path
+  over Samba under the permissions already set on the Place.
+- **The file manager** — browsing "start" at a Place; HSI never lets you browse or
+  share a path that isn't backed by one.
+
+A Place is a pointer with policy attached, not a storage abstraction: it doesn't care
+whether the path underneath is a plain directory, a mounted RAID array, or an LVM
+logical volume — that's decided one layer down, in Storage. Deleting a Place removes
+the HSI-side registration (permissions, share); it never touches the files at that path.
+
 ## Permissions model
 
 - Every user maps to an individual **Linux account**, so filesystem permissions
