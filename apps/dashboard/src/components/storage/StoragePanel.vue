@@ -10,7 +10,7 @@ type SectionId = 'disks' | 'raid' | 'lvm' | 'mounts'
 interface NavItem { id: SectionId; label: string }
 
 const nav: NavItem[] = [
-  { id: 'disks',  label: 'Disks' },
+  { id: 'disks',  label: 'Devices' },
   { id: 'raid',   label: 'RAID' },
   { id: 'lvm',    label: 'LVM' },
   { id: 'mounts', label: 'Mounts' },

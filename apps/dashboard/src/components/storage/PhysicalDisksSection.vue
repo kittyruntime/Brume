@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { trpc } from '../../lib/trpc'
 import {
-  useStorageData, fmtBytes, fmtHours, fmtTiB, usagePct, usageBarClass,
+  useStorageData, fmtBytes, fmtHours, fmtTiB, usagePct, usageBarClass, lvToDmName,
   type BlockDev,
 } from './store'
 import { type SmartResult, smartStatus, fetchSmartInto } from './smart'
@@ -15,7 +15,7 @@ import Modal from '../ui/Modal.vue'
 
 const emit = defineEmits<{ navigate: [section: 'raid' | 'lvm'] }>()
 
-const { loading, error, devices, raids, lvmPVs, refresh } = useStorageData()
+const { loading, error, devices, raids, lvmPVs, lvmLVs, refresh } = useStorageData()
 
 // ── State (SMART) ─────────────────────────────────────────────────────────────
 
@@ -39,35 +39,37 @@ function diskStatus(diskName: string) {
   return smartStatus(smartCache.value[diskName])
 }
 
-// ── Computed ──────────────────────────────────────────────────────────────────
+// ── Hierarchy ─────────────────────────────────────────────────────────────────
+// The tree is rooted at physical disks. Each child node shows what it *feeds*:
+// a partition can be a filesystem (mounted or not), a RAID member, or an LVM PV
+// — in which case its LVs appear as nested children. This mirrors the physical
+// reality: disk → partition → RAID/LVM → filesystem → mount point.
 
 const physicalDisks = computed(() => devices.value.filter(d => d.type === 'disk'))
 
-// Helper: is this disk a member of any RAID array?
-function diskRaidName(diskName: string): string | undefined {
+// Which RAID array (if any) uses this device name (or a name under it) as a member?
+function raidMemberOf(devName: string): string | undefined {
   return raids.value.find(r =>
-    r.devices.some(d => d === diskName || d.startsWith(diskName))
+    r.devices.some(d => d === devName || d.startsWith(devName))
   )?.name
 }
 
-// Helper: is this disk (or any of its partitions) used as an LVM PV?
-function diskPvVg(diskName: string): string | undefined {
-  return lvmPVs.value.find(p => {
-    const pvDev = p.name.replace('/dev/', '')
-    return pvDev === diskName || pvDev.replace(/p?\d+$/, '') === diskName
-  })?.vgName
+// Which VG (if any) uses this device as a PV?
+function pvVgOf(devName: string): string | undefined {
+  return lvmPVs.value.find(p => p.name === `/dev/${devName}`)?.vgName
 }
 
-// ── UI state: dropdown menus + expandable danger zones ────────────────────────
+// LVs belonging to a VG, as display rows.
+function lvsOfVg(vgName: string) {
+  return lvmLVs.value.filter(l => l.vgName === vgName)
+}
 
-const openMenu    = ref<string | null>(null)
-const dangerDisks = ref(new Set<string>())
-
-function toggleDanger(name: string) {
-  const s = new Set(dangerDisks.value)
-  if (s.has(name)) s.delete(name)
-  else s.add(name)
-  dangerDisks.value = s
+function lvMountpoint(lv: { vgName: string; name: string; path: string }): string {
+  const dmName = lvToDmName({ name: lv.name, vgName: lv.vgName, size: 0, path: lv.path })
+  const all: BlockDev[] = []
+  function walk(d: BlockDev) { all.push(d); d.children?.forEach(walk) }
+  devices.value.forEach(walk)
+  return all.find(d => d.name === dmName)?.mountpoint ?? ''
 }
 
 // ── Partition dialogs ─────────────────────────────────────────────────────────
@@ -140,14 +142,25 @@ const umountDlg = ref<InstanceType<typeof DeviceUnmountDialog> | null>(null)
 function openFormat(dev: BlockDev) { formatWiz.value?.open(dev) }
 function openMount(dev: BlockDev)  { mountDlg.value?.open(dev) }
 function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
+
+// ── UI state: expandable danger zones ─────────────────────────────────────────
+
+const dangerDisks = ref(new Set<string>())
+
+function toggleDanger(name: string) {
+  const s = new Set(dangerDisks.value)
+  if (s.has(name)) s.delete(name)
+  else s.add(name)
+  dangerDisks.value = s
+}
 </script>
 
 <template>
   <div>
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h2 class="text-lg font-semibold text-[var(--c-text-1)]">Physical disks</h2>
-        <p class="text-sm text-[var(--c-text-3)] mt-0.5">Disks, partitions, and S.M.A.R.T. health.</p>
+        <h2 class="text-lg font-semibold text-[var(--c-text-1)]">Devices</h2>
+        <p class="text-sm text-[var(--c-text-3)] mt-0.5">Physical disks and everything built on them: partitions, RAID, LVM, filesystems.</p>
       </div>
       <button @click="refresh" :disabled="loading" title="Refresh" class="p-1.5 rounded-lg text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-hover)] transition-colors">
         <svg :class="['w-4 h-4', loading && 'animate-spin']" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -161,12 +174,10 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
     </div>
     <div v-else-if="error" class="mt-4 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{{ error }}</div>
 
-    <div v-if="openMenu" class="fixed inset-0 z-20" @click="openMenu = null"/>
-
     <template v-if="!loading || devices.length">
 
       <!-- ════════════════════════════════════════════════════════════════════ -->
-      <!-- DISK CARDS                                                           -->
+      <!-- DISK TREE                                                             -->
       <!-- ════════════════════════════════════════════════════════════════════ -->
       <section>
         <div v-if="physicalDisks.length === 0" class="text-sm text-[var(--c-text-3)]">No physical drives detected.</div>
@@ -180,7 +191,7 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
               :class="disk.isSystem ? 'bg-warning/60' : disk.isRemovable ? 'bg-info/50' : 'bg-[var(--c-border-strong)]'"/>
             <div class="flex-1 min-w-0">
 
-              <!-- Disk header -->
+              <!-- Disk header (tree root) -->
               <div class="flex items-center gap-3 px-4 py-3">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -192,16 +203,6 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                       SYSTEM
                     </span>
                     <span v-if="disk.isRemovable" class="text-[10px] px-1.5 py-0.5 rounded-sm bg-info/10 text-info border border-info/20">USB</span>
-                    <!-- Cross-nav: RAID membership badge -->
-                    <button v-if="diskRaidName(disk.name)" @click="emit('navigate', 'raid')"
-                      class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-info/10 text-info border border-info/20 hover:bg-info/20 transition-colors">
-                      RAID {{ diskRaidName(disk.name) }} →
-                    </button>
-                    <!-- Cross-nav: LVM PV badge -->
-                    <button v-if="diskPvVg(disk.name)" @click="emit('navigate', 'lvm')"
-                      class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
-                      LVM {{ diskPvVg(disk.name) }} →
-                    </button>
                   </div>
                   <div v-if="disk.isSystem" class="text-[10px] text-warning/70 mt-0.5">Operating system disk — no modifications allowed</div>
                 </div>
@@ -214,11 +215,9 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                       diskStatus(disk.name) === 'failed'  ? 'bg-danger/10 border-danger/25 text-danger hover:bg-danger/20' :
                       diskStatus(disk.name) === 'loading' ? 'bg-[var(--c-surface-deep)] border-[var(--c-border)] text-[var(--c-text-3)]' :
                       'bg-[var(--c-surface-deep)] border-[var(--c-border)] text-[var(--c-text-3)] hover:border-[var(--c-border-strong)] hover:text-[var(--c-text-2)]']">
-                    <!-- Spinner when loading -->
                     <svg v-if="diskStatus(disk.name) === 'loading'" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
-                    <!-- Status dot otherwise -->
                     <span v-else class="w-1.5 h-1.5 rounded-full"
                       :class="diskStatus(disk.name) === 'passed' ? 'bg-success' : diskStatus(disk.name) === 'warning' ? 'bg-warning' : diskStatus(disk.name) === 'failed' ? 'bg-danger animate-pulse' : 'bg-[var(--c-text-3)]/40'"/>
                     <span v-if="diskStatus(disk.name) === 'passed'">Healthy</span>
@@ -226,7 +225,6 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                     <span v-else-if="diskStatus(disk.name) === 'failed'">Failed</span>
                     <span v-else-if="diskStatus(disk.name) === 'loading'">…</span>
                     <span v-else>SMART</span>
-                    <!-- Temperature (when data loaded) -->
                     <template v-if="smartCache[disk.name]?.available && smartCache[disk.name]?.temperature">
                       <span class="opacity-50">·</span>
                       <span :class="(smartCache[disk.name]?.temperature ?? 0) >= 55 ? 'text-danger' : (smartCache[disk.name]?.temperature ?? 0) >= 40 ? 'text-warning' : ''">{{ smartCache[disk.name]?.temperature }}°C</span>
@@ -268,7 +266,6 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                   <template v-else-if="sc?.available">
                     <!-- Overview row -->
                     <div class="px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-[var(--c-border)]">
-                      <!-- Health -->
                       <div class="flex items-center gap-1.5">
                         <span class="w-2 h-2 rounded-full shrink-0"
                           :class="diskStatus(disk.name) === 'passed' ? 'bg-success' : diskStatus(disk.name) === 'warning' ? 'bg-warning' : 'bg-danger'"/>
@@ -277,27 +274,17 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                           {{ sc.healthPassed ? 'PASSED' : 'FAILED' }}
                         </span>
                       </div>
-                      <!-- Temperature -->
                       <div v-if="sc.temperature" class="flex items-center gap-1 text-xs">
-                        <svg class="w-3 h-3 text-[var(--c-text-3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-                        </svg>
                         <span :class="sc.temperature >= 55 ? 'text-danger font-semibold' : sc.temperature >= 40 ? 'text-warning' : 'text-[var(--c-text-2)]'">
                           {{ sc.temperature }}°C
                         </span>
                       </div>
-                      <!-- Power-on hours -->
-                      <div v-if="sc.powerOnHours" class="flex items-center gap-1 text-xs text-[var(--c-text-3)]">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                      <div v-if="sc.powerOnHours" class="text-xs text-[var(--c-text-3)]">
                         {{ fmtHours(sc.powerOnHours) }} powered on
                       </div>
-                      <!-- Power cycles -->
                       <div v-if="sc.powerCycles" class="text-xs text-[var(--c-text-3)]">
                         {{ sc.powerCycles.toLocaleString() }} power cycles
                       </div>
-                      <!-- Drive type -->
                       <div class="ml-auto text-[10px] px-1.5 py-0.5 rounded-sm bg-[var(--c-surface-deep)] border border-[var(--c-border)] text-[var(--c-text-3)]">
                         {{ sc.nvme ? 'NVMe' : sc.rotationRate === 0 ? 'SSD' : `HDD ${sc.rotationRate} RPM` }}
                       </div>
@@ -377,7 +364,7 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                                 </svg>
                                 <svg v-else-if="attr.isCritical && attr.raw > 0" class="w-3 h-3 text-warning mx-auto" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 00-1-1z" clip-rule="evenodd"/>
                                 </svg>
                                 <svg v-else-if="attr.isCritical" class="w-3 h-3 text-success/60 mx-auto" fill="currentColor" viewBox="0 0 20 20">
                                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -392,47 +379,67 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
                 </template>
               </div>
 
-              <!-- Partitions -->
+              <!-- Children: partitions and what they feed -->
               <div v-if="disk.children && disk.children.length > 0" class="border-t border-[var(--c-border)] divide-y divide-[var(--c-border)]">
-                <div v-for="part in disk.children.filter(c => c.type !== 'swap')" :key="part.name"
-                  class="group/part flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--c-hover)]/30 transition-colors">
-                  <!-- Status dot -->
-                  <div class="w-1.5 h-1.5 rounded-full shrink-0"
-                    :class="part.isSystem ? 'bg-warning/60' : part.mountpoint ? 'bg-success/70' : 'bg-[var(--c-text-3)]/25'"/>
-                  <!-- Info -->
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-mono text-xs text-[var(--c-text-2)]">/dev/{{ part.name }}</span>
-                      <span class="text-[10px] text-[var(--c-text-3)] tabular-nums">{{ fmtBytes(part.size) }}</span>
-                      <span v-if="part.fstype" class="text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-[var(--c-surface-deep)] text-[var(--c-text-3)] uppercase border border-[var(--c-border)]">{{ part.fstype }}</span>
-                      <span v-else class="text-[10px] italic text-[var(--c-text-3)]/60">unformatted</span>
-                    </div>
-                    <div v-if="part.mountpoint" class="text-[10px] font-mono text-[var(--c-text-3)] mt-0.5">↳ {{ part.mountpoint }}</div>
-                    <div v-if="part.usageTotal > 0" class="mt-1.5 flex items-center gap-2">
-                      <div class="w-24 h-0.5 bg-[var(--c-surface-deep)] rounded-full overflow-hidden">
-                        <div class="h-full rounded-full" :class="usageBarClass(usagePct(part))" :style="{ width: usagePct(part) + '%' }"/>
+                <template v-for="part in disk.children.filter(c => c.type !== 'swap')" :key="part.name">
+                  <div class="group/part flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--c-hover)]/30 transition-colors">
+                    <!-- Status dot -->
+                    <div class="w-1.5 h-1.5 rounded-full shrink-0"
+                      :class="part.isSystem ? 'bg-warning/60' : part.mountpoint ? 'bg-success/70' : 'bg-[var(--c-text-3)]/25'"/>
+                    <!-- Info -->
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-mono text-xs text-[var(--c-text-2)]">/dev/{{ part.name }}</span>
+                        <span class="text-[10px] text-[var(--c-text-3)] tabular-nums">{{ fmtBytes(part.size) }}</span>
+                        <span v-if="part.fstype" class="text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-[var(--c-surface-deep)] text-[var(--c-text-3)] uppercase border border-[var(--c-border)]">{{ part.fstype }}</span>
+                        <span v-else-if="!raidMemberOf(part.name) && !pvVgOf(part.name)" class="text-[10px] italic text-[var(--c-text-3)]/60">unformatted</span>
+                        <!-- Role: RAID member -->
+                        <button v-if="raidMemberOf(part.name)" @click="emit('navigate', 'raid')"
+                          class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-info/10 text-info border border-info/20 hover:bg-info/20 transition-colors">
+                          RAID {{ raidMemberOf(part.name) }} →
+                        </button>
+                        <!-- Role: LVM PV -->
+                        <button v-if="pvVgOf(part.name)" @click="emit('navigate', 'lvm')"
+                          class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
+                          LVM {{ pvVgOf(part.name) }} →
+                        </button>
                       </div>
-                      <span class="text-[10px] text-[var(--c-text-3)] tabular-nums">{{ fmtBytes(part.usageFree) }} free</span>
+                      <div v-if="part.mountpoint" class="text-[10px] font-mono text-[var(--c-text-3)] mt-0.5">↳ {{ part.mountpoint }}</div>
+                      <div v-if="part.usageTotal > 0" class="mt-1.5 flex items-center gap-2">
+                        <div class="w-24 h-0.5 bg-[var(--c-surface-deep)] rounded-full overflow-hidden">
+                          <div class="h-full rounded-full" :class="usageBarClass(usagePct(part))" :style="{ width: usagePct(part) + '%' }"/>
+                        </div>
+                        <span class="text-[10px] text-[var(--c-text-3)] tabular-nums">{{ fmtBytes(part.usageFree) }} free</span>
+                      </div>
+                      <!-- Nested: LVs of the VG this partition is a PV of -->
+                      <div v-if="pvVgOf(part.name) && lvsOfVg(pvVgOf(part.name)!).length" class="mt-1.5 space-y-1">
+                        <div v-for="lv in lvsOfVg(pvVgOf(part.name)!)" :key="lv.path" class="flex items-center gap-2 text-[10px]">
+                          <span class="text-[var(--c-text-3)]/50">└─</span>
+                          <span class="font-mono text-purple-400">{{ lv.vgName }}/{{ lv.name }}</span>
+                          <span class="text-[var(--c-text-3)] tabular-nums">{{ fmtBytes(lv.size) }}</span>
+                          <span v-if="lvMountpoint(lv)" class="font-mono text-[var(--c-text-3)]">↳ {{ lvMountpoint(lv) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Actions — revealed on hover, hidden by default -->
+                    <div v-if="!part.isSystem" class="flex items-center gap-1 shrink-0 opacity-0 group-hover/part:opacity-100 transition-opacity">
+                      <button v-if="!part.mountpoint && !raidMemberOf(part.name) && !pvVgOf(part.name)" @click="openFormat(part)"
+                        class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-[var(--c-accent)]/50 hover:text-[var(--c-accent)] transition-colors">Format</button>
+                      <button v-if="part.fstype && !part.mountpoint" @click="openMount(part)"
+                        class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-success/50 hover:text-success transition-colors">Mount</button>
+                      <button v-if="part.mountpoint" @click="openUmount(part)"
+                        class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-warning/50 hover:text-warning transition-colors">Unmount</button>
+                      <div class="w-px h-3 bg-[var(--c-border)] mx-1"/>
+                      <button v-if="!part.mountpoint" @click="partDeleteDlg = { disk, part, busy: false, err: '' }"
+                        title="Delete this partition"
+                        class="w-6 h-6 flex items-center justify-center rounded-sm text-[var(--c-text-3)]/40 hover:text-danger hover:bg-danger/10 transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/>
+                        </svg>
+                      </button>
                     </div>
                   </div>
-                  <!-- Actions — revealed on hover, hidden by default -->
-                  <div v-if="!part.isSystem" class="flex items-center gap-1 shrink-0 opacity-0 group-hover/part:opacity-100 transition-opacity">
-                    <button v-if="!part.mountpoint" @click="openFormat(part)"
-                      class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-[var(--c-accent)]/50 hover:text-[var(--c-accent)] transition-colors">Format</button>
-                    <button v-if="part.fstype && !part.mountpoint" @click="openMount(part)"
-                      class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-success/50 hover:text-success transition-colors">Mount</button>
-                    <button v-if="part.mountpoint" @click="openUmount(part)"
-                      class="text-[11px] px-2 py-0.5 rounded-sm border border-[var(--c-border)] text-[var(--c-text-3)] hover:border-warning/50 hover:text-warning transition-colors">Unmount</button>
-                    <div class="w-px h-3 bg-[var(--c-border)] mx-1"/>
-                    <button v-if="!part.mountpoint" @click="partDeleteDlg = { disk, part, busy: false, err: '' }"
-                      title="Delete this partition"
-                      class="w-6 h-6 flex items-center justify-center rounded-sm text-[var(--c-text-3)]/40 hover:text-danger hover:bg-danger/10 transition-colors">
-                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                </template>
               </div>
 
               <!-- Unpartitioned raw disk -->
@@ -524,9 +531,7 @@ function openUmount(dev: BlockDev) { umountDlg.value?.open(dev) }
       </template>
     </ConfirmDestroyDialog>
 
-    <!-- ════════════════════════════════════════════════════════════════════ -->
-    <!-- ADD PARTITION DIALOG                                                  -->
-    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <!-- Add partition -->
     <Modal v-if="partCreateDlg" panel-class="w-full max-w-sm" :show-close="false" :prevent-close="!!partCreateDlg.busy" @close="partCreateDlg = null">
           <div class="px-5 py-4 border-b border-[var(--c-border)]">
             <h3 class="font-semibold text-[var(--c-text-1)]">Add partition</h3>
