@@ -13,6 +13,20 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   return next({ ctx: { user: ctx.user } })
 })
 
+// A user created with mustChangePassword set (currently: only the seeded bootstrap
+// admin) can't perform any mutation except changing their own password or logging
+// out, until they do. Queries stay open — the dashboard still needs to load to show
+// the change-password screen. Enforced server-side, not just by the UI redirect,
+// since the JWT carrying this flag is trusted for its full 7-day life either way.
+const EXEMPT_WHILE_MUST_CHANGE_PASSWORD = new Set(["user.changePassword", "auth.logout"])
+
+const blockIfMustChangePassword = t.middleware(({ ctx, path, type, next }) => {
+  if (type === "mutation" && ctx.user?.mustChangePassword && !EXEMPT_WHILE_MUST_CHANGE_PASSWORD.has(path)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Change your password before performing this action." })
+  }
+  return next()
+})
+
 const isAdmin = t.middleware(({ ctx, next }) => {
   if (!ctx.user?.isAdmin) {
     throw new TRPCError({ code: "FORBIDDEN" })
@@ -92,7 +106,7 @@ const auditLog = t.middleware(async (opts) => {
   return result
 })
 
-export const protectedProcedure   = t.procedure.use(isAuthed).use(auditLog)
-export const adminProcedure       = t.procedure.use(isAuthed).use(isAdmin).use(auditLog)
-export const userManagerProcedure = t.procedure.use(isAuthed).use(isUserManager).use(auditLog)
-export const storageProcedure = t.procedure.use(isAuthed).use(hasCapability("storage")).use(auditLog)
+export const protectedProcedure   = t.procedure.use(isAuthed).use(blockIfMustChangePassword).use(auditLog)
+export const adminProcedure       = t.procedure.use(isAuthed).use(blockIfMustChangePassword).use(isAdmin).use(auditLog)
+export const userManagerProcedure = t.procedure.use(isAuthed).use(blockIfMustChangePassword).use(isUserManager).use(auditLog)
+export const storageProcedure = t.procedure.use(isAuthed).use(blockIfMustChangePassword).use(hasCapability("storage")).use(auditLog)

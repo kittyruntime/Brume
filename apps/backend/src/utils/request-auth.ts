@@ -7,6 +7,7 @@ export async function loadCurrentUserAuthorization(userId: string) {
     select: {
       isAdmin: true,
       isUserManager: true,
+      mustChangePassword: true,
       capabilities: { select: { capability: true } },
     },
   })

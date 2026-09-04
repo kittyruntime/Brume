@@ -3,10 +3,6 @@ import { TRPCError } from "@trpc/server"
 import type { PrismaClient } from "@app/database"
 import { requestSync } from "../nats"
 
-/** Seeded default password for the initial `admin` account. Surfaced so the
- *  dashboard can warn while it's still in use (see user.securityStatus). */
-export const DEFAULT_PASSWORD = "admin"
-
 // System account names that may never be claimed as an HSI username, since
 // the username doubles as the backing Linux/Samba account. "admin" is
 // deliberately excluded — it's a valid (and commonly used) HSI username.
@@ -72,7 +68,9 @@ export async function changePassword(
   const newHashed = await bcrypt.hash(newPassword, 12)
   const result = await prisma.user.update({
     where: { id: userId },
-    data: { password: newHashed },
+    // A changed password can never leave mustChangePassword set — that flag only
+    // ever means "still on the value it was created with".
+    data: { password: newHashed, mustChangePassword: false },
     select: { id: true, username: true },
   })
   void syncSystemPassword(prisma, userId, newPassword)

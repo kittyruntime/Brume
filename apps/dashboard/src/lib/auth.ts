@@ -20,6 +20,9 @@ export function useAuth() {
     const p = parseJwt(token.value)
     return p.isAdmin === true || p.isUserManager === true
   })
+  const mustChangePassword = computed(() =>
+    token.value ? parseJwt(token.value).mustChangePassword === true : false
+  )
   const currentUserId = computed(() =>
     token.value ? (parseJwt(token.value).userId as string | null) ?? null : null
   )
@@ -48,6 +51,13 @@ export function useAuth() {
     localStorage.removeItem('username')
   }
 
+  // Swap in a token re-issued mid-session (currently: after a password change,
+  // which clears mustChangePassword) without a full login round-trip.
+  function setToken(newToken: string) {
+    token.value = newToken
+    localStorage.setItem('token', newToken)
+  }
+
   return {
     token,
     currentUsername,
@@ -55,8 +65,10 @@ export function useAuth() {
     isAuthenticated,
     isAdmin,
     isUserManager,
+    mustChangePassword,
     hasCapability,
     login,
     logout,
+    setToken,
   }
 }

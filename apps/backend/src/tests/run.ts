@@ -31,10 +31,11 @@ const {
 type UploadState = import("../services/upload.service").UploadState
 
 async function testCurrentAuthorizationWinsOverJwtClaims() {
-  const token = signToken("user-1", true, true, ["storage"])
+  const token = signToken("user-1", true, true, ["storage"], false)
   const user = await authenticateSession(`Bearer ${token}`, async () => ({
     isAdmin: false,
     isUserManager: false,
+    mustChangePassword: false,
     capabilities: [],
   }))
 
@@ -46,20 +47,21 @@ async function testCurrentAuthorizationWinsOverJwtClaims() {
 }
 
 async function testDeletedAndLoggedOutAccountsAreRejected() {
-  const deletedToken = signToken("deleted-user", false, false, [])
+  const deletedToken = signToken("deleted-user", false, false, [], false)
   assert.equal(await authenticateSession(`Bearer ${deletedToken}`, async () => null), null)
 
-  const loggedOutToken = signToken("logged-out-user", false, false, [])
+  const loggedOutToken = signToken("logged-out-user", false, false, [], false)
   blacklistToken(verifyToken(loggedOutToken).jti)
   assert.equal(await authenticateSession(`Bearer ${loggedOutToken}`, async () => ({
     isAdmin: false,
     isUserManager: false,
+    mustChangePassword: false,
     capabilities: [],
   })), null)
 }
 
 async function testDatabaseFailuresAreNotHiddenAsInvalidSessions() {
-  const token = signToken("user-2", false, false, [])
+  const token = signToken("user-2", false, false, [], false)
   await assert.rejects(
     authenticateSession(`Bearer ${token}`, async () => { throw new Error("database unavailable") }),
     /database unavailable/,

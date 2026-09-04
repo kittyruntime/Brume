@@ -16,7 +16,7 @@ type Me = {
 const meIsAdmin = computed(() => me.value?.isAdmin === true)
 const meCanManage = computed(() => !!me.value && (me.value.isAdmin || me.value.isUserManager))
 
-useAuth()
+const { setToken } = useAuth()
 
 const { theme, setTheme } = useTheme()
 const { accent, setAccent } = useAccent()
@@ -88,7 +88,8 @@ async function submitPassword() {
   if (pwForm.next.length < 6)         { pwError.value = 'New password must be at least 6 characters'; return }
   pwLoading.value = true
   try {
-    await trpc.user.changePassword.mutate({ currentPassword: pwForm.current, newPassword: pwForm.next })
+    const result = await trpc.user.changePassword.mutate({ currentPassword: pwForm.current, newPassword: pwForm.next })
+    setToken(result.token)
     pwSuccess.value = true
     Object.assign(pwForm, { current: '', next: '', confirm: '' })
   } catch (e: any) {

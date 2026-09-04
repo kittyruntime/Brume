@@ -1,9 +1,9 @@
 import { z } from "zod"
-import bcrypt from "bcryptjs"
 import { TRPCError } from "@trpc/server"
 import { router, protectedProcedure, userManagerProcedure, adminProcedure, CAPABILITIES } from "../index"
-import { userSelect, createUser, changePassword, DEFAULT_PASSWORD, reLinuxUsername } from "../../services/user.service"
+import { userSelect, createUser, changePassword, reLinuxUsername } from "../../services/user.service"
 import { syncSharesBestEffort } from "../../services/sharing.service"
+import { signToken } from "../auth"
 
 // Per-account UI preferences, synced across a user's browsers/devices. Kept to the
 // cross-device-meaningful prefs (theme/accent/sidebar order); device-specific ones
@@ -53,17 +53,16 @@ export const userRouter = router({
     })
   }),
 
-  // Lightweight security posture for the current account. Used by the dashboard
-  // to nudge users who never changed the seeded default credentials. Kept out of
-  // `me` (which is polled elsewhere) because the bcrypt compare is deliberate CPU
-  // work — this is fetched once per session. The password hash never leaves the
-  // server; only the boolean does.
+  // Lightweight security posture for the current account. Superseded by
+  // ctx.user.mustChangePassword (carried in the JWT, decoded client-side) for the
+  // forced-change flow — kept as a query only as a fallback for a token issued
+  // before this field existed, or one that's simply gone stale mid-session.
   securityStatus: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.prisma.user.findUniqueOrThrow({
       where: { id: ctx.user.userId },
-      select: { password: true },
+      select: { mustChangePassword: true },
     })
-    return { usingDefaultPassword: await bcrypt.compare(DEFAULT_PASSWORD, user.password) }
+    return { mustChangePassword: user.mustChangePassword }
   }),
 
   create: userManagerProcedure
@@ -129,9 +128,14 @@ export const userRouter = router({
       currentPassword: z.string(),
       newPassword: z.string().min(6).max(128),
     }))
-    .mutation(({ ctx, input }) =>
-      changePassword(ctx.prisma, ctx.user.userId, input.currentPassword, input.newPassword)
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const result = await changePassword(ctx.prisma, ctx.user.userId, input.currentPassword, input.newPassword)
+      // ctx.user's existing claims are still valid post-change (only the password
+      // moved) — re-sign rather than re-query, so a forced change unblocks the
+      // account immediately instead of waiting for the next login.
+      const token = signToken(ctx.user.userId, ctx.user.isAdmin, ctx.user.isUserManager, ctx.user.capabilities, false)
+      return { ...result, token }
+    }),
 
   delete: userManagerProcedure
     .input(z.object({ userId: z.string() }))

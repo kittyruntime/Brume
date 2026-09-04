@@ -1148,7 +1148,7 @@ fi
 echo ""
 if [[ "$IS_UPDATE" -eq 0 ]]; then
   echo -e "  ${BOLD}Default login:${NC}  admin / admin"
-  echo -e "  ${YELLOW}!! Change the admin password immediately after first login !!${NC}"
+  echo -e "  ${YELLOW}!! You'll be required to change this password on first login !!${NC}"
   echo ""
 fi
 

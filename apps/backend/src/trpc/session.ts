@@ -3,6 +3,7 @@ import { isTokenBlacklisted, verifyToken, type TokenPayload } from "./auth"
 export interface CurrentUserAuthorization {
   isAdmin: boolean
   isUserManager: boolean
+  mustChangePassword: boolean
   capabilities: { capability: string }[]
 }
 
@@ -38,6 +39,7 @@ export async function authenticateSession(
     jti: payload.jti,
     isAdmin: user.isAdmin,
     isUserManager: user.isAdmin || user.isUserManager,
+    mustChangePassword: user.mustChangePassword,
     capabilities: user.capabilities.map(item => item.capability),
   }
 }

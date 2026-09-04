@@ -15,7 +15,9 @@ async function main() {
   await prisma.user.upsert({
     where:  { username: "admin" },
     update: needsHash ? { password: hashedPassword, isAdmin: true } : { isAdmin: true },
-    create: { username: "admin", password: hashedPassword, isAdmin: true },
+    // mustChangePassword only applies here, at creation — an update to an
+    // already-existing admin account never re-imposes it.
+    create: { username: "admin", password: hashedPassword, isAdmin: true, mustChangePassword: true },
   })
 
   console.log("Seeded admin user")

@@ -28,7 +28,7 @@ import Launchpad from '../components/desktop/Launchpad.vue'
 import DesktopShell from '../components/desktop/DesktopShell.vue'
 
 const router = useRouter()
-const { currentUsername, isAdmin, hasCapability, logout } = useAuth()
+const { currentUsername, isAdmin, hasCapability, mustChangePassword, logout } = useAuth()
 const { hasAlerts } = useAlerts()
 const { notifications } = useNotifications()
 const { desktopMode, setDesktopMode, openApp } = useDesktop()
@@ -47,18 +47,6 @@ async function checkUpdateBadge() {
   try {
     const s = await trpc.update.status.query()
     updateAvailable.value = s.hasUpdate
-  } catch { /* non-critical */ }
-}
-
-// Default-credentials nudge: shown once per session (re-checked on every boot)
-// until the account moves off the seeded default password.
-const usingDefaultPassword = ref(false)
-const defaultPwDismissed = ref(false)
-
-async function checkDefaultPassword() {
-  try {
-    const s = await trpc.user.securityStatus.query()
-    usingDefaultPassword.value = s.usingDefaultPassword
   } catch { /* non-critical */ }
 }
 
@@ -227,7 +215,6 @@ onMounted(() => {
   document.addEventListener('click', closeUserMenu)
   window.addEventListener('resize', updateIsMobile)
   checkUpdateBadge()
-  checkDefaultPassword()
   syncPreferences()
   updateTimer = setInterval(checkUpdateBadge, 3_600_000) // hourly
 })
@@ -417,29 +404,21 @@ onUnmounted(() => {
 
     <!-- Main area -->
     <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <!-- Default-password warning: dismissible, links straight to the profile
-           where the password can be changed. -->
+      <!-- Forced password change: this account was created with its password still
+           at the value it was seeded with. Not dismissible — the server refuses
+           every other mutation until it's changed (see blockIfMustChangePassword
+           in trpc/index.ts), so leaving this open to close would just be confusing. -->
       <div
-        v-if="usingDefaultPassword && !defaultPwDismissed"
+        v-if="mustChangePassword"
         class="flex items-center gap-3 px-4 sm:px-6 py-2 bg-[var(--c-warning-subtle)] border-b border-[var(--c-border)] text-sm flex-shrink-0"
       >
         <svg class="w-4 h-4 shrink-0 text-[var(--c-warning)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
         <span class="text-[var(--c-text-1)] flex-1 min-w-0">
-          You're signed in with the default password.
+          You must change your password before doing anything else.
           <button @click="goToProfile" class="font-medium underline underline-offset-2 hover:opacity-80">Change it now</button>
-          to keep your server secure.
         </span>
-        <button
-          @click="defaultPwDismissed = true"
-          title="Dismiss"
-          class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[var(--c-text-3)] hover:bg-[var(--c-hover)] hover:text-[var(--c-text-1)] transition-colors"
-        >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
       <DesktopShell v-if="desktopMode && !isMobile" />
       <template v-else>
