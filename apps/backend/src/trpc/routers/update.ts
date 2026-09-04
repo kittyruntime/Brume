@@ -2,6 +2,7 @@ import { adminProcedure, router } from "../index"
 import { z } from "zod"
 import fs from "node:fs"
 import path from "node:path"
+import { execFile } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { requestSync } from "../../nats"
 
@@ -60,6 +61,45 @@ function isNewer(candidate: string, current: string): boolean {
 const GITHUB_REPO = "kittyruntime/home-server-interface"
 let restartScheduled = false
 
+// ── Pre-flight checks ─────────────────────────────────────────────────────────
+// Run before applying an update to catch the obvious failure modes (no disk
+// space, a service already down, an update already in flight). Each check is
+// independent and non-blocking: a `fail` blocks the install in the UI, a `warn`
+// lets it through with a visible caveat.
+
+type PreflightStatus = "ok" | "warn" | "fail"
+type PreflightCheck = { id: string; label: string; status: PreflightStatus; detail?: string }
+
+const MIN_FREE_BYTES = 500 * 1024 * 1024 // 500 MB headroom for download + extract
+
+function diskFreeBytes(dir: string): Promise<number> {
+  return new Promise((resolve) => {
+    // -P: POSIX output (single line per fs), -k: 1024-byte blocks. df can wrap
+    // long device names onto their own line, so parse the last field group.
+    execFile("df", ["-Pk", dir], (err, stdout) => {
+      if (err) return resolve(-1)
+      const lines = stdout.trim().split("\n")
+      const last = lines[lines.length - 1] ?? ""
+      const cols = last.trim().split(/\s+/)
+      // If the device name wrapped, the numbers are on the next line; take the
+      // line that has at least 4 numeric fields.
+      const dataLine = cols.length >= 4 ? cols : (lines[lines.length - 2] ?? "").trim().split(/\s+/)
+      const availKb = parseInt(dataLine[3] ?? "", 10)
+      resolve(Number.isFinite(availKb) ? availKb * 1024 : -1)
+    })
+  })
+}
+
+function systemdActive(unit: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("systemctl", ["is-active", "--quiet", unit], (err) => resolve(!err))
+  })
+}
+
+function fmtMb(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`
+}
+
 export const updateRouter = router({
   status: adminProcedure.query(() => {
     const current  = readCurrentVersion()
@@ -95,6 +135,57 @@ export const updateRouter = router({
       "utf8"
     )
     return result
+  }),
+
+  preflight: adminProcedure.query(async (): Promise<{ checks: PreflightCheck[]; canApply: boolean }> => {
+    const checks: PreflightCheck[] = []
+
+    // 1. Free disk space on the install partition
+    const free = await diskFreeBytes(installDir())
+    if (free < 0) {
+      checks.push({ id: "disk", label: "Free disk space", status: "warn", detail: "Could not determine free space" })
+    } else if (free < MIN_FREE_BYTES) {
+      checks.push({ id: "disk", label: "Free disk space", status: "fail", detail: `Only ${fmtMb(free)} free — ${fmtMb(MIN_FREE_BYTES)} recommended` })
+    } else {
+      checks.push({ id: "disk", label: "Free disk space", status: "ok", detail: `${fmtMb(free)} available` })
+    }
+
+    // 2. HSI services are up (so the update can actually restart into the new version)
+    const units = ["hsi", "hsi-root-worker", "hsi-nats"] as const
+    const states = await Promise.all(units.map(u => systemdActive(u)))
+    const down = units.filter((_, i) => !states[i])
+    if (down.length === 0) {
+      checks.push({ id: "services", label: "HSI services", status: "ok", detail: "hsi, hsi-root-worker, hsi-nats all active" })
+    } else {
+      checks.push({ id: "services", label: "HSI services", status: "fail", detail: `Inactive: ${down.join(", ")}` })
+    }
+
+    // 3. No update already in flight
+    const pending = fs.existsSync(pendingUpdateFile())
+    checks.push(
+      pending
+        ? { id: "pending", label: "No pending update", status: "fail", detail: "An update is already scheduled — restart to apply it first" }
+        : { id: "pending", label: "No pending update", status: "ok" },
+    )
+
+    // 4. Current version is known (otherwise we can't reason about the upgrade)
+    const current = readCurrentVersion()
+    checks.push(
+      current === "unknown"
+        ? { id: "version", label: "Current version", status: "warn", detail: "Could not determine the running version" }
+        : { id: "version", label: "Current version", status: "ok", detail: current },
+    )
+
+    // 5. A release check has succeeded at least once (GitHub reachable)
+    const check = readCheck()
+    checks.push(
+      check
+        ? { id: "release", label: "Release info", status: "ok", detail: `Last checked ${check.checkedAt}` }
+        : { id: "release", label: "Release info", status: "warn", detail: "Never checked for updates — run a check first" },
+    )
+
+    const canApply = checks.every(c => c.status !== "fail")
+    return { checks, canApply }
   }),
 
   apply: adminProcedure

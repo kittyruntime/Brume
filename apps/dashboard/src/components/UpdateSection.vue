@@ -6,8 +6,11 @@ import { useConfirm } from '../lib/confirm'
 import LoadingSpinner from './ui/LoadingSpinner.vue'
 
 type Status = Awaited<ReturnType<typeof trpc.update.status.query>>
+type Preflight = Awaited<ReturnType<typeof trpc.update.preflight.query>>
 
 const status   = ref<Status | null>(null)
+const preflight = ref<Preflight | null>(null)
+const preflightLoading = ref(false)
 const loading  = ref(true)
 const applying = ref(false)
 const checking = ref(false)
@@ -25,10 +28,22 @@ async function fetchStatus() {
   try {
     status.value = await trpc.update.status.query()
     error.value = null
+    if (status.value.hasUpdate) fetchPreflight()
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to fetch update status'
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchPreflight() {
+  preflightLoading.value = true
+  try {
+    preflight.value = await trpc.update.preflight.query()
+  } catch {
+    preflight.value = null
+  } finally {
+    preflightLoading.value = false
   }
 }
 
@@ -283,12 +298,32 @@ onUnmounted(() => clearInterval(timer))
         </div>
       </div>
 
+      <!-- Pre-flight checks -->
+      <div v-if="status.hasUpdate && preflight" class="panel-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-[var(--c-border)]">
+          <p class="eyebrow">Pre-flight checks</p>
+        </div>
+        <ul class="divide-y divide-[var(--c-border)]">
+          <li v-for="c in preflight.checks" :key="c.id" class="px-4 py-2.5 flex items-center gap-3">
+            <span
+              class="w-2 h-2 rounded-full shrink-0"
+              :class="c.status === 'ok' ? 'bg-[var(--c-success)]' : c.status === 'warn' ? 'bg-[var(--c-warning)]' : 'bg-[var(--c-danger)]'"
+            />
+            <span class="text-sm text-[var(--c-text-1)] flex-1 min-w-0">{{ c.label }}</span>
+            <span v-if="c.detail" class="text-xs text-[var(--c-text-3)] truncate">{{ c.detail }}</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- Install CTA -->
       <div v-if="status.hasUpdate" class="flex items-center justify-between gap-4">
-        <p class="text-xs text-[var(--c-text-3)]">The server will restart after installation (~30s downtime).</p>
+        <p class="text-xs text-[var(--c-text-3)]">
+          <template v-if="preflight && !preflight.canApply">A pre-flight check is failing — resolve it before installing.</template>
+          <template v-else>The server will restart after installation (~30s downtime).</template>
+        </p>
         <button
           @click="applyUpdate"
-          :disabled="applying || status.pending"
+          :disabled="applying || status.pending || (preflight ? !preflight.canApply : false)"
           class="btn btn-primary btn-sm shrink-0"
         >
           <LoadingSpinner v-if="applying || status.pending" label="" />
