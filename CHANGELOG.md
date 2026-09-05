@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Update pre-flight checks**: before installing an update, HSI now runs five
+  checks — free disk space on the install partition (fails under 500 MB), HSI
+  systemd services active, no update already pending, current version known, and
+  release info fetched. The Updates screen lists each check with its status and
+  blocks the Install button when a check fails (warnings are non-blocking).
+
 ## [1.51.0] - 2026-09-05
 
 ### Changed
