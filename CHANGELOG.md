@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.52.0] - 2026-09-05
+
 ### Added
 - **Update pre-flight checks**: before installing an update, HSI now runs five
   checks — free disk space on the install partition (fails under 500 MB), HSI
@@ -871,7 +873,8 @@ First stable release.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.51.0...HEAD
+[Unreleased]: https://github.com/kittyruntime/home-server-interface/compare/v1.52.0...HEAD
+[1.52.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.51.0...v1.52.0
 [1.51.0]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.3...v1.51.0
 [1.50.3]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.2...v1.50.3
 [1.50.2]: https://github.com/kittyruntime/home-server-interface/compare/v1.50.1...v1.50.2
